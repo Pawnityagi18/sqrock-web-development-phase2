@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Menu, X } from 'lucide-react';
+import { Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Trash2, Menu, X } from 'lucide-react';
 
 export default function Header({ 
   activeTab, 
@@ -11,10 +11,18 @@ export default function Header({
   proposalsCount,
   currentUser,
   onOpenAuthModal,
-  onLogout
+  onLogout,
+  onDeleteAccount
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+
+  const handleDeleteAccountClick = () => {
+    if (window.confirm('⚠️ Are you sure you want to permanently delete your account? This action cannot be undone.')) {
+      onDeleteAccount();
+      setProfileDropdownOpen(false);
+    }
+  };
 
   return (
     <header style={{
@@ -239,7 +247,7 @@ export default function Header({
                   position: 'absolute',
                   top: '110%',
                   right: 0,
-                  width: '220px',
+                  width: '230px',
                   background: 'var(--bg-card)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 'var(--radius-lg)',
@@ -269,9 +277,17 @@ export default function Header({
                   <button 
                     onClick={() => { onLogout(); setProfileDropdownOpen(false); }}
                     className="btn btn-secondary btn-sm"
-                    style={{ justifyContent: 'flex-start', color: 'var(--accent-rose)' }}
+                    style={{ justifyContent: 'flex-start' }}
                   >
                     <LogOut size={14} /> Log Out
+                  </button>
+
+                  <button 
+                    onClick={handleDeleteAccountClick}
+                    className="btn btn-secondary btn-sm"
+                    style={{ justifyContent: 'flex-start', color: 'var(--accent-rose)', border: '1px solid var(--accent-rose-light)', background: 'var(--accent-rose-light)' }}
+                  >
+                    <Trash2 size={14} /> Delete Account
                   </button>
                 </div>
               )}

@@ -216,6 +216,12 @@ export default function App() {
     showToast('Logged out successfully', 'info');
   };
 
+  const handleDeleteAccount = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('workpulse_user');
+    showToast('Your account has been deleted permanently.', 'info');
+  };
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
@@ -231,6 +237,7 @@ export default function App() {
         currentUser={currentUser}
         onOpenAuthModal={(mode) => setAuthModalConfig({ isOpen: true, mode })}
         onLogout={handleLogout}
+        onDeleteAccount={handleDeleteAccount}
       />
 
       {/* Main Content Area */}
