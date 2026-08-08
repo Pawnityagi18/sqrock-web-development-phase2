@@ -235,15 +235,6 @@ export default function App() {
 
       {/* Main Content Area */}
       <main style={{ flex: 1 }}>
-        
-        {/* Full-Stack Status Badge Banner */}
-        <div style={{ background: serverOnline ? '#E6F5F5' : '#FFFBEB', padding: '0.4rem 1rem', borderBottom: '1px solid var(--border-subtle)', textAlign: 'center', fontSize: '0.8rem', fontWeight: 600 }}>
-          {serverOnline ? (
-            <span style={{ color: 'var(--primary)' }}>🟢 Full-Stack Express Server connected at http://localhost:5000/api</span>
-          ) : (
-            <span style={{ color: 'var(--text-muted)' }}>⚡ Operating in High-Performance Local Client Mode</span>
-          )}
-        </div>
 
         {activeTab === 'explore' && (
           <>
