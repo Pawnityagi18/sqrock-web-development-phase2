@@ -1,5 +1,5 @@
 import React from 'react';
-import { Briefcase, Globe, Share2, Send, Mail, Phone, Heart } from 'lucide-react';
+import { Globe, Share2, Send, Mail, Phone, Heart } from 'lucide-react';
 
 export default function Footer({ onNavigate }) {
   return (
@@ -20,22 +20,22 @@ export default function Footer({ onNavigate }) {
           {/* Brand Info */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #6366F1 0%, #06B6D4 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Briefcase size={18} color="#FFFFFF" />
-              </div>
-              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', fontWeight: 800, color: '#FFF' }}>
+              <img 
+                src="/logo.jpg" 
+                alt="WorkPulse Logo"
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  objectFit: 'cover',
+                  border: '1.5px solid var(--border-teal)'
+                }}
+              />
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary)' }}>
                 WorkPulse
               </span>
             </div>
-            <p style={{ fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+            <p style={{ fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.25rem', color: 'var(--text-muted)' }}>
               The premiere freelance marketplace connecting visionaries with top engineering, design, and AI talent worldwide.
             </p>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -52,7 +52,7 @@ export default function Footer({ onNavigate }) {
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
                 }}>
-                  <Icon size={16} color="var(--text-main)" />
+                  <Icon size={16} color="var(--primary)" />
                 </div>
               ))}
             </div>
@@ -60,7 +60,7 @@ export default function Footer({ onNavigate }) {
 
           {/* Quick Links */}
           <div>
-            <h4 style={{ color: '#FFF', fontWeight: 700, marginBottom: '1rem', fontSize: '1rem' }}>For Clients</h4>
+            <h4 style={{ color: 'var(--text-main)', fontWeight: 700, marginBottom: '1rem', fontSize: '1rem' }}>For Clients</h4>
             <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem' }}>
               <li style={{ cursor: 'pointer' }} onClick={() => onNavigate('explore')}>Post a Job Brief</li>
               <li style={{ cursor: 'pointer' }} onClick={() => onNavigate('freelancers')}>Browse Top Freelancers</li>
@@ -70,7 +70,7 @@ export default function Footer({ onNavigate }) {
           </div>
 
           <div>
-            <h4 style={{ color: '#FFF', fontWeight: 700, marginBottom: '1rem', fontSize: '1rem' }}>For Talent</h4>
+            <h4 style={{ color: 'var(--text-main)', fontWeight: 700, marginBottom: '1rem', fontSize: '1rem' }}>For Talent</h4>
             <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem' }}>
               <li style={{ cursor: 'pointer' }} onClick={() => onNavigate('explore')}>Find Freelance Jobs</li>
               <li style={{ cursor: 'pointer' }}>Create Freelancer Profile</li>
@@ -81,7 +81,7 @@ export default function Footer({ onNavigate }) {
 
           {/* Contact Details */}
           <div>
-            <h4 style={{ color: '#FFF', fontWeight: 700, marginBottom: '1rem', fontSize: '1rem' }}>Contact & Support</h4>
+            <h4 style={{ color: 'var(--text-main)', fontWeight: 700, marginBottom: '1rem', fontSize: '1rem' }}>Contact & Support</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.875rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Mail size={16} color="var(--primary)" /> support@workpulse.io

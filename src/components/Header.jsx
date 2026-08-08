@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Briefcase, Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Menu, X } from 'lucide-react';
+import { Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Menu, X } from 'lucide-react';
 
 export default function Header({ 
   activeTab, 
@@ -38,18 +38,18 @@ export default function Header({
           onClick={() => setActiveTab('explore')} 
           style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}
         >
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #008080 0%, #0284C7 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: 'var(--shadow-primary)'
-          }}>
-            <Briefcase size={22} color="#FFFFFF" />
-          </div>
+          <img 
+            src="/logo.jpg" 
+            alt="WorkPulse Logo"
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              objectFit: 'cover',
+              boxShadow: 'var(--shadow-primary)',
+              border: '1.5px solid var(--border-teal)'
+            }}
+          />
           <div>
             <span style={{
               fontFamily: 'var(--font-heading)',
