@@ -23,7 +23,8 @@ export default function Header({
       zIndex: 900,
       backgroundColor: 'var(--bg-glass-heavy)',
       backdropFilter: 'blur(12px)',
-      borderBottom: '1px solid var(--border-subtle)'
+      borderBottom: '1px solid var(--border-subtle)',
+      boxShadow: 'var(--shadow-sm)'
     }}>
       <div className="container" style={{
         display: 'flex',
@@ -41,11 +42,11 @@ export default function Header({
             width: '42px',
             height: '42px',
             borderRadius: '12px',
-            background: 'linear-gradient(135deg, #6366F1 0%, #06B6D4 100%)',
+            background: 'linear-gradient(135deg, #008080 0%, #0284C7 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+            boxShadow: 'var(--shadow-primary)'
           }}>
             <Briefcase size={22} color="#FFFFFF" />
           </div>
@@ -54,15 +55,14 @@ export default function Header({
               fontFamily: 'var(--font-heading)',
               fontSize: '1.45rem',
               fontWeight: 800,
-              background: 'linear-gradient(135deg, #FFFFFF 0%, #CBD5E1 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
+              color: 'var(--primary)',
+              letterSpacing: '-0.02em'
             }}>
               WorkPulse
             </span>
             <span style={{
               fontSize: '0.65rem',
-              fontWeight: 700,
+              fontWeight: 800,
               color: 'var(--secondary)',
               letterSpacing: '0.08em',
               display: 'block',
@@ -80,8 +80,8 @@ export default function Header({
             onClick={() => setActiveTab('explore')}
             className={`btn ${activeTab === 'explore' ? 'btn-secondary' : ''}`}
             style={{ 
-              color: activeTab === 'explore' ? 'var(--text-main)' : 'var(--text-muted)',
-              background: activeTab === 'explore' ? 'rgba(255,255,255,0.08)' : 'transparent',
+              color: activeTab === 'explore' ? 'var(--primary)' : 'var(--text-muted)',
+              background: activeTab === 'explore' ? 'var(--primary-light)' : 'transparent',
               border: 'none'
             }}
           >
@@ -92,8 +92,8 @@ export default function Header({
             onClick={() => setActiveTab('freelancers')}
             className={`btn ${activeTab === 'freelancers' ? 'btn-secondary' : ''}`}
             style={{ 
-              color: activeTab === 'freelancers' ? 'var(--text-main)' : 'var(--text-muted)',
-              background: activeTab === 'freelancers' ? 'rgba(255,255,255,0.08)' : 'transparent',
+              color: activeTab === 'freelancers' ? 'var(--primary)' : 'var(--text-muted)',
+              background: activeTab === 'freelancers' ? 'var(--primary-light)' : 'transparent',
               border: 'none'
             }}
           >
@@ -104,8 +104,8 @@ export default function Header({
             onClick={() => setActiveTab('dashboard')}
             className={`btn ${activeTab === 'dashboard' ? 'btn-secondary' : ''}`}
             style={{ 
-              color: activeTab === 'dashboard' ? 'var(--text-main)' : 'var(--text-muted)',
-              background: activeTab === 'dashboard' ? 'rgba(255,255,255,0.08)' : 'transparent',
+              color: activeTab === 'dashboard' ? 'var(--primary)' : 'var(--text-muted)',
+              background: activeTab === 'dashboard' ? 'var(--primary-light)' : 'transparent',
               border: 'none',
               position: 'relative'
             }}
@@ -146,7 +146,7 @@ export default function Header({
                 padding: '0.35rem 0.75rem',
                 borderRadius: 'var(--radius-full)',
                 fontSize: '0.78rem',
-                fontWeight: 600,
+                fontWeight: 700,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease'
               }}
@@ -158,7 +158,7 @@ export default function Header({
               style={{
                 border: 'none',
                 background: userRole === 'client' ? 'var(--secondary)' : 'transparent',
-                color: userRole === 'client' ? '#000' : 'var(--text-muted)',
+                color: userRole === 'client' ? '#FFF' : 'var(--text-muted)',
                 padding: '0.35rem 0.75rem',
                 borderRadius: 'var(--radius-full)',
                 fontSize: '0.78rem',
@@ -190,7 +190,7 @@ export default function Header({
                 position: 'absolute',
                 top: '0',
                 right: '0',
-                backgroundColor: 'var(--primary)',
+                backgroundColor: 'var(--accent-sun)',
                 color: '#FFF',
                 fontSize: '0.65rem',
                 fontWeight: 700,
@@ -227,7 +227,7 @@ export default function Header({
                   alt={currentUser.name}
                   style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
                 />
-                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#FFF' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
                   {currentUser.name.split(' ')[0]}
                 </span>
                 <ChevronDown size={14} color="var(--text-muted)" />
@@ -241,7 +241,7 @@ export default function Header({
                   right: 0,
                   width: '220px',
                   background: 'var(--bg-card)',
-                  border: '1px solid var(--border-medium)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: 'var(--radius-lg)',
                   padding: '0.75rem',
                   boxShadow: 'var(--shadow-lg)',
@@ -251,7 +251,7 @@ export default function Header({
                   zIndex: 1000
                 }}>
                   <div style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#FFF' }}>{currentUser.name}</div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>{currentUser.name}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{currentUser.email}</div>
                     <span className="badge badge-category" style={{ marginTop: '0.35rem' }}>
                       Mode: {currentUser.role === 'freelancer' ? 'Freelancer' : 'Employer'}
@@ -302,64 +302,8 @@ export default function Header({
             <PlusCircle size={17} /> Post Project
           </button>
 
-          {/* Mobile Menu Toggle Button */}
-          <button 
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="mobile-toggle"
-            style={{
-              display: 'none',
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-main)',
-              cursor: 'pointer'
-            }}
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-
         </div>
       </div>
-
-      {/* Mobile Drawer Navigation */}
-      {mobileMenuOpen && (
-        <div style={{
-          backgroundColor: 'var(--bg-card)',
-          borderBottom: '1px solid var(--border-medium)',
-          padding: '1rem 1.5rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.75rem'
-        }}>
-          <button 
-            onClick={() => { setActiveTab('explore'); setMobileMenuOpen(false); }}
-            className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}
-          >
-            <Search size={16} /> Browse Projects
-          </button>
-          <button 
-            onClick={() => { setActiveTab('freelancers'); setMobileMenuOpen(false); }}
-            className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}
-          >
-            <UserCheck size={16} /> Find Freelancers
-          </button>
-          <button 
-            onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
-            className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}
-          >
-            <LayoutDashboard size={16} /> Dashboard
-          </button>
-          {!currentUser?.loggedIn && (
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button onClick={() => { onOpenAuthModal('login'); setMobileMenuOpen(false); }} className="btn btn-secondary" style={{ flex: 1 }}>
-                Log In
-              </button>
-              <button onClick={() => { onOpenAuthModal('signup'); setMobileMenuOpen(false); }} className="btn btn-primary" style={{ flex: 1 }}>
-                Sign Up
-              </button>
-            </div>
-          )}
-        </div>
-      )}
     </header>
   );
 }
