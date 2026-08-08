@@ -112,13 +112,28 @@ export default function ProjectList({
             {/* Search Keyword Filter */}
             <div className="form-group">
               <label className="form-label">Search Keyword</label>
-              <input 
-                type="text"
-                placeholder="e.g. Next.js, Figma..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="form-input"
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <img 
+                  src="/logo.jpg" 
+                  alt="Search Logo"
+                  style={{
+                    position: 'absolute',
+                    left: '10px',
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '6px',
+                    objectFit: 'cover'
+                  }}
+                />
+                <input 
+                  type="text"
+                  placeholder="e.g. Next.js, Figma..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="form-input"
+                  style={{ paddingLeft: '2.5rem' }}
+                />
+              </div>
             </div>
 
             {/* Category Filter Dropdown */}

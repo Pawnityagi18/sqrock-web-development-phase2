@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Sparkles, TrendingUp, Users, CheckCircle2, DollarSign, ArrowRight, Star } from 'lucide-react';
+import { Sparkles, TrendingUp, Users, CheckCircle2, DollarSign, ArrowRight, Star } from 'lucide-react';
 import { PLATFORM_STATS } from '../data/mockData';
 
 export default function Hero({ searchQuery, setSearchQuery, selectedCategory, setSelectedCategory, categories, onSearchSubmit }) {
@@ -77,10 +77,10 @@ export default function Hero({ searchQuery, setSearchQuery, selectedCategory, se
               Connect with top-rated UI/UX Designers, React Developers, and AI Engineers to bring your vision to life.
             </p>
 
-            {/* Multi-Input Search Box */}
+            {/* Multi-Input Search Box with Brand Logo */}
             <div style={{
               background: '#FFFFFF',
-              border: '2px solid var(--border-teal)',
+              border: '2px solid var(--primary)',
               borderRadius: 'var(--radius-xl)',
               padding: '0.65rem',
               boxShadow: 'var(--shadow-lg)',
@@ -90,9 +90,19 @@ export default function Hero({ searchQuery, setSearchQuery, selectedCategory, se
               alignItems: 'center',
               marginBottom: '1.5rem'
             }}>
-              {/* Keyword Input */}
-              <div style={{ flex: '1 1 240px', display: 'flex', alignItems: 'center', padding: '0 0.75rem', gap: '0.5rem' }}>
-                <Search size={20} color="var(--primary)" />
+              {/* Keyword Input with WorkPulse Logo */}
+              <div style={{ flex: '1 1 240px', display: 'flex', alignItems: 'center', padding: '0 0.5rem', gap: '0.65rem' }}>
+                <img 
+                  src="/logo.jpg" 
+                  alt="WorkPulse Logo"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    objectFit: 'cover',
+                    boxShadow: '0 2px 8px rgba(0,128,128,0.2)'
+                  }}
+                />
                 <input 
                   type="text" 
                   placeholder="Search a Freelancer or Job (e.g. UI/UX, React)..." 
@@ -105,7 +115,8 @@ export default function Hero({ searchQuery, setSearchQuery, selectedCategory, se
                     color: 'var(--text-main)',
                     outline: 'none',
                     fontFamily: 'var(--font-body)',
-                    fontSize: '0.95rem'
+                    fontSize: '0.95rem',
+                    fontWeight: 500
                   }}
                 />
               </div>
@@ -171,7 +182,7 @@ export default function Hero({ searchQuery, setSearchQuery, selectedCategory, se
 
           </div>
 
-          {/* Right Column: Hero Graphic Banner (Inspired by Reference UI) */}
+          {/* Right Column: Hero Graphic Banner */}
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
             
             {/* Background Golden Circle Graphic */}
