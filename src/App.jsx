@@ -25,20 +25,32 @@ export default function App() {
 
   // Authentication State
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('workpulse_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('workpulse_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   // Projects State
   const [projects, setProjects] = useState(() => {
-    const saved = localStorage.getItem('workpulse_projects');
-    return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+    try {
+      const saved = localStorage.getItem('workpulse_projects');
+      return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+    } catch {
+      return INITIAL_PROJECTS;
+    }
   });
 
   // Saved/Bookmarked Project IDs
   const [savedProjectIds, setSavedProjectIds] = useState(() => {
-    const saved = localStorage.getItem('workpulse_saved_projects');
-    return saved ? JSON.parse(saved) : [1, 3];
+    try {
+      const saved = localStorage.getItem('workpulse_saved_projects');
+      return saved ? JSON.parse(saved) : [1, 3];
+    } catch {
+      return [1, 3];
+    }
   });
 
   // Freelancers State
@@ -46,15 +58,20 @@ export default function App() {
 
   // Proposals State
   const [proposals, setProposals] = useState(() => {
-    const saved = localStorage.getItem('workpulse_proposals');
-    return saved ? JSON.parse(saved) : INITIAL_PROPOSALS;
+    try {
+      const saved = localStorage.getItem('workpulse_proposals');
+      return saved ? JSON.parse(saved) : INITIAL_PROPOSALS;
+    } catch {
+      return INITIAL_PROPOSALS;
+    }
   });
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [budgetRange, setBudgetRange] = useState(10000);
-  const [selectedUrgency, setSelectedUrgency] = useState('all');
+  const [urgencyFilter, setUrgencyFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
 
   // Modal Control States
   const [selectedProject, setSelectedProject] = useState(null);
@@ -67,22 +84,38 @@ export default function App() {
 
   // Sync state to LocalStorage
   useEffect(() => {
-    localStorage.setItem('workpulse_projects', JSON.stringify(projects));
+    try {
+      localStorage.setItem('workpulse_projects', JSON.stringify(projects));
+    } catch (e) {
+      console.warn('Storage sync error', e);
+    }
   }, [projects]);
 
   useEffect(() => {
-    localStorage.setItem('workpulse_proposals', JSON.stringify(proposals));
+    try {
+      localStorage.setItem('workpulse_proposals', JSON.stringify(proposals));
+    } catch (e) {
+      console.warn('Storage sync error', e);
+    }
   }, [proposals]);
 
   useEffect(() => {
-    localStorage.setItem('workpulse_saved_projects', JSON.stringify(savedProjectIds));
+    try {
+      localStorage.setItem('workpulse_saved_projects', JSON.stringify(savedProjectIds));
+    } catch (e) {
+      console.warn('Storage sync error', e);
+    }
   }, [savedProjectIds]);
 
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('workpulse_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('workpulse_user');
+    try {
+      if (currentUser) {
+        localStorage.setItem('workpulse_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('workpulse_user');
+      }
+    } catch (e) {
+      console.warn('Storage sync error', e);
     }
   }, [currentUser]);
 
@@ -231,7 +264,7 @@ export default function App() {
             <CategoryGrid 
               categories={CATEGORIES}
               selectedCategory={selectedCategory}
-              setSelectedCategory={setSelectedCategory}
+              onSelectCategory={setSelectedCategory}
             />
 
             {/* Projects Explorer with Left Filter Sidebar */}
@@ -239,17 +272,19 @@ export default function App() {
               <ProjectList 
                 projects={projects}
                 categories={CATEGORIES}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
                 selectedCategory={selectedCategory}
                 setSelectedCategory={setSelectedCategory}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
                 budgetRange={budgetRange}
                 setBudgetRange={setBudgetRange}
-                selectedUrgency={selectedUrgency}
-                setSelectedUrgency={setSelectedUrgency}
-                savedProjectIds={savedProjectIds}
+                urgencyFilter={urgencyFilter}
+                setUrgencyFilter={setUrgencyFilter}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                savedProjects={savedProjectIds}
                 onToggleSaveProject={handleToggleSaveProject}
-                onOpenProjectModal={(proj) => setSelectedProject(proj)}
+                onSelectProject={(proj) => setSelectedProject(proj)}
               />
             </div>
           </>
@@ -258,7 +293,7 @@ export default function App() {
         {activeTab === 'freelancers' && (
           <FreelancerList 
             freelancers={freelancers}
-            onOpenFreelancerModal={(freelancer) => setSelectedFreelancer(freelancer)}
+            onSelectFreelancer={(freelancer) => setSelectedFreelancer(freelancer)}
           />
         )}
 
