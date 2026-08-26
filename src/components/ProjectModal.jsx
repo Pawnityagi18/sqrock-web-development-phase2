@@ -1,16 +1,31 @@
 import React, { useState } from 'react';
-import { X, Send, DollarSign, Calendar, CheckCircle2, ShieldCheck, MapPin, AlertCircle, FileText } from 'lucide-react';
+import { X, CheckCircle2, Clock, DollarSign, Send, ShieldCheck, FileText, UserCheck, Sparkles } from 'lucide-react';
+import { generateAIProposal } from '../utils/aiGenerator';
 
-export default function ProjectModal({ project, onClose, onSubmitProposal, isSubmitted }) {
+export default function ProjectModal({ project, onClose, onSubmitProposal }) {
   const [freelancerName, setFreelancerName] = useState('Elena Rostova');
   const [freelancerEmail, setFreelancerEmail] = useState('elena.rostova@dev.com');
   const [bidAmount, setBidAmount] = useState(project.budget);
-  const [estimatedDays, setEstimatedDays] = useState(14);
+  const [estimatedDays, setEstimatedDays] = useState(project.daysLeft || 14);
   const [coverLetter, setCoverLetter] = useState('');
-  const [errors, setErrors] = useState({});
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
+  const [errors, setErrors] = useState({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Automated 5% Platform Fee Calculation
   const platformFee = Math.round(bidAmount * 0.05);
   const netEarnings = bidAmount - platformFee;
+
+  // AI Proposal Cover Letter Generator Handler
+  const handleGenerateAIProposal = () => {
+    setIsGeneratingAI(true);
+    setTimeout(() => {
+      const aiPitch = generateAIProposal(project, freelancerName);
+      setCoverLetter(aiPitch);
+      setIsGeneratingAI(false);
+    }, 400);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -18,52 +33,45 @@ export default function ProjectModal({ project, onClose, onSubmitProposal, isSub
 
     if (!freelancerName.trim()) newErrors.freelancerName = 'Name is required';
     if (!freelancerEmail.trim() || !freelancerEmail.includes('@')) newErrors.freelancerEmail = 'Valid email is required';
-    if (!bidAmount || bidAmount <= 0) newErrors.bidAmount = 'Please enter a valid bid amount';
-    if (!coverLetter.trim() || coverLetter.length < 20) newErrors.coverLetter = 'Cover letter must be at least 20 characters long';
+    if (!bidAmount || bidAmount <= 0) newErrors.bidAmount = 'Valid bid offer required';
+    if (!coverLetter.trim() || coverLetter.length < 20) newErrors.coverLetter = 'Proposal must be at least 20 characters';
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
 
-    onSubmitProposal({
-      id: `prop-${Date.now()}`,
+    const proposalPayload = {
       projectId: project.id,
       projectTitle: project.title,
       freelancerName,
-      freelancerTitle: 'Freelancer Professional',
-      freelancerAvatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&auto=format&fit=crop&q=80',
-      bidAmount: Number(bidAmount),
+      freelancerEmail,
+      bidAmount,
       platformFee,
       netAmount: netEarnings,
-      estimatedDays: Number(estimatedDays),
-      coverLetter,
-      status: 'Pending',
-      submittedDate: 'Just now'
-    });
+      estimatedDays,
+      coverLetter
+    };
+
+    onSubmitProposal(proposalPayload);
+    setIsSubmitted(true);
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '840px' }}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '780px' }}>
         
         {/* Modal Header */}
         <div style={{
-          padding: '1.5rem 1.75rem',
+          padding: '1.25rem 1.5rem',
           borderBottom: '1px solid var(--border-subtle)',
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'flex-start'
+          alignItems: 'center'
         }}>
-          <div>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <span className="badge badge-category">{project.categoryName}</span>
-              {project.urgency === 'Featured' && <span className="badge badge-featured">★ Featured</span>}
-              {project.urgency === 'Urgent' && <span className="badge badge-urgent">⚡ Urgent</span>}
-            </div>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#FFFFFF' }}>
-              {project.title}
-            </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="badge badge-category">{project.categoryName || project.category}</span>
+            <span className="badge badge-verified">Verified Project</span>
           </div>
 
           <button 
@@ -72,8 +80,8 @@ export default function ProjectModal({ project, onClose, onSubmitProposal, isSub
               background: 'rgba(255,255,255,0.06)',
               border: 'none',
               color: 'var(--text-muted)',
-              width: '36px',
-              height: '36px',
+              width: '32px',
+              height: '32px',
               borderRadius: '50%',
               cursor: 'pointer',
               display: 'flex',
@@ -81,17 +89,22 @@ export default function ProjectModal({ project, onClose, onSubmitProposal, isSub
               justifyContent: 'center'
             }}
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Modal Body */}
         <div style={{ padding: '1.75rem' }}>
-          
+
+          {/* Project Title */}
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--text-main)' }}>
+            {project.title}
+          </h2>
+
           {/* Project Summary Banner */}
           <div style={{
-            background: 'rgba(99, 102, 241, 0.08)',
-            border: '1px solid rgba(99, 102, 241, 0.2)',
+            background: 'var(--primary-light)',
+            border: '1px solid var(--border-teal)',
             borderRadius: 'var(--radius-lg)',
             padding: '1.25rem',
             display: 'grid',
@@ -108,15 +121,15 @@ export default function ProjectModal({ project, onClose, onSubmitProposal, isSub
 
             <div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Submission Deadline</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#FFF' }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
                 {project.deadline} ({project.daysLeft} days left)
               </div>
             </div>
 
             <div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Client Info</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#FFF', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                {project.client.name} {project.client.verified && <CheckCircle2 size={14} color="var(--accent-emerald)" />}
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                {project.client?.name || project.clientName} {(project.client?.verified || project.verifiedClient) && <CheckCircle2 size={14} color="var(--accent-emerald)" />}
               </div>
             </div>
           </div>
@@ -130,30 +143,32 @@ export default function ProjectModal({ project, onClose, onSubmitProposal, isSub
           </div>
 
           {/* Key Deliverables */}
-          <div style={{ marginBottom: '1.75rem' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.65rem' }}>Scope & Deliverables</h3>
-            <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {project.deliverables.map((item, idx) => (
-                <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-main)' }}>
-                  <CheckCircle2 size={16} color="var(--primary)" /> {item}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {project.deliverables && (
+            <div style={{ marginBottom: '1.75rem' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.65rem' }}>Scope & Deliverables</h3>
+              <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {project.deliverables.map((item, idx) => (
+                  <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-main)' }}>
+                    <CheckCircle2 size={16} color="var(--primary)" /> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '1.5rem 0' }} />
 
           {/* Proposal Submission Form */}
           {isSubmitted ? (
             <div style={{
-              background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
+              background: 'var(--accent-emerald-light)',
+              border: '1px solid #A7F3D0',
               borderRadius: 'var(--radius-lg)',
               padding: '1.5rem',
               textAlign: 'center'
             }}>
               <CheckCircle2 size={38} color="var(--accent-emerald)" style={{ marginBottom: '0.5rem' }} />
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FFF' }}>Proposal Submitted Successfully!</h3>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#047857' }}>Proposal Submitted Successfully!</h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
                 Your proposal has been logged in the client dashboard. You will receive notifications on updates.
               </p>
@@ -235,11 +250,36 @@ export default function ProjectModal({ project, onClose, onSubmitProposal, isSub
                 />
               </div>
 
+              {/* Cover Letter with AI Proposal Generator Button */}
               <div className="form-group">
-                <label className="form-label">Cover Letter & Pitch Proposal</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Cover Letter & Pitch Proposal</label>
+                  <button 
+                    type="button"
+                    onClick={handleGenerateAIProposal}
+                    disabled={isGeneratingAI}
+                    className="btn btn-sm"
+                    style={{
+                      background: 'linear-gradient(135deg, #008080 0%, #0284C7 100%)',
+                      color: '#FFFFFF',
+                      fontSize: '0.78rem',
+                      padding: '0.35rem 0.85rem',
+                      borderRadius: 'var(--radius-full)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      opacity: isGeneratingAI ? 0.7 : 1
+                    }}
+                  >
+                    <Sparkles size={14} color="#F59E0B" fill="#F59E0B" /> 
+                    {isGeneratingAI ? 'Generating AI Proposal...' : '✨ Generate AI Proposal'}
+                  </button>
+                </div>
                 <textarea 
-                  rows={4}
-                  placeholder="Explain why you are the ideal freelancer for this project, past relevant experience, and technical approach..."
+                  rows={6}
+                  placeholder="Explain why you are the ideal freelancer for this project, or click '✨ Generate AI Proposal' above..."
                   value={coverLetter}
                   onChange={(e) => setCoverLetter(e.target.value)}
                   className="form-textarea"
