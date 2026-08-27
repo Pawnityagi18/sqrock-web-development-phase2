@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, LogIn, UserPlus, Mail, Lock, User, ShieldCheck } from 'lucide-react';
+import { X, LogIn, UserPlus } from 'lucide-react';
 import { apiLogin, apiSignup } from '../api/client';
 
 export default function AuthModal({ initialMode = 'login', onClose, onLoginSuccess }) {
@@ -17,6 +17,22 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState('');
+
+  const clearFieldError = (field) => {
+    if (errors[field]) {
+      setErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[field];
+        return copy;
+      });
+    }
+  };
+
+  const switchMode = (newMode) => {
+    setMode(newMode);
+    setErrors({});
+    setServerError('');
+  };
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -89,7 +105,6 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
       }
       onLoginSuccess(res.user, `Logged in as Demo ${demoRole === 'freelancer' ? 'Freelancer' : 'Employer'}`);
     } catch (err) {
-      // Fallback local mock if backend is unreachable
       const fallbackUser = {
         name: demoName,
         email: demoEmail,
@@ -119,7 +134,7 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
         }}>
           <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--bg-input)', padding: '4px', borderRadius: 'var(--radius-full)' }}>
             <button 
-              onClick={() => { setMode('login'); setServerError(''); }}
+              onClick={() => switchMode('login')}
               style={{
                 border: 'none',
                 background: mode === 'login' ? 'var(--primary)' : 'transparent',
@@ -135,7 +150,7 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
               Log In
             </button>
             <button 
-              onClick={() => { setMode('signup'); setServerError(''); }}
+              onClick={() => switchMode('signup')}
               style={{
                 border: 'none',
                 background: mode === 'signup' ? 'var(--primary)' : 'transparent',
@@ -271,7 +286,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                   type="email"
                   placeholder="name@company.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    clearFieldError('email');
+                  }}
                   className="form-input"
                 />
                 {errors.email && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.email}</span>}
@@ -283,7 +301,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                   type="password"
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    clearFieldError('password');
+                  }}
                   className="form-input"
                 />
                 {errors.password && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.password}</span>}
@@ -317,7 +338,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                   type="text"
                   placeholder="e.g. Alex Morgan"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    clearFieldError('name');
+                  }}
                   className="form-input"
                 />
                 {errors.name && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.name}</span>}
@@ -329,7 +353,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                   type="email"
                   placeholder="alex@domain.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    clearFieldError('email');
+                  }}
                   className="form-input"
                 />
                 {errors.email && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.email}</span>}
@@ -342,7 +369,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      clearFieldError('password');
+                    }}
                     className="form-input"
                   />
                   {errors.password && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.password}</span>}
@@ -354,7 +384,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                     type="password"
                     placeholder="••••••••"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      clearFieldError('confirmPassword');
+                    }}
                     className="form-input"
                   />
                   {errors.confirmPassword && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.confirmPassword}</span>}
@@ -366,7 +399,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                   <input 
                     type="checkbox"
                     checked={agreeTerms}
-                    onChange={(e) => setAgreeTerms(e.target.checked)}
+                    onChange={(e) => {
+                      setAgreeTerms(e.target.checked);
+                      clearFieldError('agreeTerms');
+                    }}
                     style={{ accentColor: 'var(--primary)' }}
                   />
                   I agree to the WorkPulse Terms of Service & Privacy Policy
