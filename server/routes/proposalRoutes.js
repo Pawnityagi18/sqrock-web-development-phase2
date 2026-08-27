@@ -1,39 +1,106 @@
 import express from 'express';
 import Proposal from '../models/Proposal.js';
 import Project from '../models/Project.js';
+import Contract from '../models/Contract.js';
+import { protect, requireRole } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // GET /api/proposals
-router.get('/', async (req, res) => {
+router.get('/', protect, async (req, res) => {
   try {
-    const proposals = await Proposal.find().sort({ createdAt: -1 });
-    res.json({ success: true, proposals });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+    const { projectId } = req.query;
+    let query = {};
 
-// POST /api/proposals
-router.post('/', async (req, res) => {
-  try {
-    const newProposal = await Proposal.create(req.body);
-    // Increment project proposals count
-    if (req.body.projectId) {
-      await Project.findByIdAndUpdate(req.body.projectId, { $inc: { proposalsCount: 1 } });
+    if (projectId) {
+      query.project = projectId;
+    } else if (req.user.role === 'freelancer') {
+      query.freelancer = req.user._id;
     }
-    res.json({ success: true, proposal: newProposal });
+
+    const proposals = await Proposal.find(query)
+      .populate('project', 'title category budget status client')
+      .populate('freelancer', 'name email avatar title rating jobSuccessRate')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, count: proposals.length, proposals });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// PUT /api/proposals/:id/status
-router.put('/:id/status', async (req, res) => {
+// POST /api/proposals - Freelancer submits proposal
+router.post('/', protect, requireRole('freelancer'), async (req, res) => {
   try {
-    const { status } = req.body;
-    const proposal = await Proposal.findByIdAndUpdate(req.params.id, { status }, { new: true });
-    res.json({ success: true, proposal });
+    const { projectId, coverLetter, bidAmount, estimatedDays } = req.body;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    const existingProposal = await Proposal.findOne({ project: projectId, freelancer: req.user._id });
+    if (existingProposal) {
+      return res.status(400).json({ success: false, message: 'You have already submitted a proposal for this project' });
+    }
+
+    const proposal = await Proposal.create({
+      project: projectId,
+      freelancer: req.user._id,
+      coverLetter,
+      bidAmount,
+      estimatedDays,
+      status: 'Pending'
+    });
+
+    // Increment proposals count on project
+    await Project.findByIdAndUpdate(projectId, { $inc: { proposalsCount: 1 } });
+
+    const populated = await Proposal.findById(proposal._id)
+      .populate('project', 'title category budget status')
+      .populate('freelancer', 'name email avatar title rating');
+
+    res.status(201).json({ success: true, proposal: populated });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/proposals/:id/accept - Client accepts proposal & creates Contract
+router.post('/:id/accept', protect, requireRole('client'), async (req, res) => {
+  try {
+    const proposal = await Proposal.findById(req.params.id).populate('project');
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    if (proposal.project.client.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Only project owner can accept proposal' });
+    }
+
+    proposal.status = 'Accepted';
+    await proposal.save();
+
+    // Mark project as In Progress
+    await Project.findByIdAndUpdate(proposal.project._id, { status: 'In Progress' });
+
+    // Create Contract automatically with initial milestone
+    const contract = await Contract.create({
+      project: proposal.project._id,
+      client: req.user._id,
+      freelancer: proposal.freelancer,
+      proposal: proposal._id,
+      title: proposal.project.title,
+      totalAmount: proposal.bidAmount,
+      status: 'active',
+      milestones: [{
+        title: 'Initial Project Deliverable & Final Completion',
+        amount: proposal.bidAmount,
+        status: 'pending'
+      }]
+    });
+
+    res.json({ success: true, message: 'Proposal accepted and contract initialized', proposal, contract });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

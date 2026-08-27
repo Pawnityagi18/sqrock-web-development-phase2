@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, LogIn, UserPlus, Mail, Lock, User, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { X, LogIn, UserPlus, Mail, Lock, User, ShieldCheck } from 'lucide-react';
+import { apiLogin, apiSignup } from '../api/client';
 
 export default function AuthModal({ initialMode = 'login', onClose, onLoginSuccess }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'signup'
@@ -14,8 +15,10 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
   const [agreeTerms, setAgreeTerms] = useState(true);
 
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState('');
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     const newErrors = {};
 
@@ -27,20 +30,20 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
       return;
     }
 
-    const authUser = {
-      name: email.split('@')[0].replace('.', ' ').toUpperCase(),
-      email,
-      role,
-      avatar: role === 'freelancer' 
-        ? 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&auto=format&fit=crop&q=80'
-        : 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
-      loggedIn: true
-    };
+    setLoading(true);
+    setServerError('');
 
-    onLoginSuccess(authUser, 'Logged in successfully!');
+    try {
+      const res = await apiLogin({ email, password, role });
+      onLoginSuccess(res.user, 'Logged in successfully!');
+    } catch (err) {
+      setServerError(err.message || 'Login failed. Please check credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSignupSubmit = (e) => {
+  const handleSignupSubmit = async (e) => {
     e.preventDefault();
     const newErrors = {};
 
@@ -55,36 +58,51 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
       return;
     }
 
-    const authUser = {
-      name,
-      email,
-      role,
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      loggedIn: true
-    };
+    setLoading(true);
+    setServerError('');
 
-    onLoginSuccess(authUser, 'Account created & logged in successfully!');
+    try {
+      const res = await apiSignup({ name, email, password, role });
+      onLoginSuccess(res.user, 'Account created & logged in successfully!');
+    } catch (err) {
+      setServerError(err.message || 'Signup failed. Email may already exist.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Demo Login Quick Action
-  const handleQuickDemoLogin = (demoRole) => {
-    const demoUser = demoRole === 'freelancer' 
-      ? {
-          name: 'Elena Rostova',
-          email: 'elena.rostova@dev.com',
-          role: 'freelancer',
-          avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&auto=format&fit=crop&q=80',
-          loggedIn: true
-        }
-      : {
-          name: 'Nexus Tech Labs',
-          email: 'hiring@nexustech.io',
-          role: 'client',
-          avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
-          loggedIn: true
-        };
+  const handleQuickDemoLogin = async (demoRole) => {
+    setLoading(true);
+    setServerError('');
 
-    onLoginSuccess(demoUser, `Logged in as Demo ${demoRole === 'freelancer' ? 'Freelancer' : 'Employer'}`);
+    const demoEmail = demoRole === 'freelancer' ? 'elena.rostova@dev.com' : 'hiring@nexustech.io';
+    const demoName = demoRole === 'freelancer' ? 'Elena Rostova' : 'Nexus Tech Labs';
+    const demoPassword = 'password123';
+
+    try {
+      let res;
+      try {
+        res = await apiLogin({ email: demoEmail, password: demoPassword, role: demoRole });
+      } catch {
+        res = await apiSignup({ name: demoName, email: demoEmail, password: demoPassword, role: demoRole });
+      }
+      onLoginSuccess(res.user, `Logged in as Demo ${demoRole === 'freelancer' ? 'Freelancer' : 'Employer'}`);
+    } catch (err) {
+      // Fallback local mock if backend is unreachable
+      const fallbackUser = {
+        name: demoName,
+        email: demoEmail,
+        role: demoRole,
+        avatar: demoRole === 'freelancer'
+          ? 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&auto=format&fit=crop&q=80'
+          : 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
+        loggedIn: true
+      };
+      onLoginSuccess(fallbackUser, `Logged in as Demo ${demoRole === 'freelancer' ? 'Freelancer' : 'Employer'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -101,7 +119,7 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
         }}>
           <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--bg-input)', padding: '4px', borderRadius: 'var(--radius-full)' }}>
             <button 
-              onClick={() => setMode('login')}
+              onClick={() => { setMode('login'); setServerError(''); }}
               style={{
                 border: 'none',
                 background: mode === 'login' ? 'var(--primary)' : 'transparent',
@@ -117,7 +135,7 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
               Log In
             </button>
             <button 
-              onClick={() => setMode('signup')}
+              onClick={() => { setMode('signup'); setServerError(''); }}
               style={{
                 border: 'none',
                 background: mode === 'signup' ? 'var(--primary)' : 'transparent',
@@ -156,6 +174,20 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
         {/* Modal Body */}
         <div style={{ padding: '1.75rem' }}>
 
+          {serverError && (
+            <div style={{
+              background: 'rgba(244, 63, 94, 0.1)',
+              border: '1px solid rgba(244, 63, 94, 0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 1rem',
+              color: '#F43F5E',
+              fontSize: '0.825rem',
+              marginBottom: '1rem'
+            }}>
+              {serverError}
+            </div>
+          )}
+
           {/* Quick Demo Login Banner */}
           <div style={{
             background: 'rgba(99, 102, 241, 0.08)',
@@ -172,6 +204,7 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
               <button 
                 type="button" 
                 onClick={() => handleQuickDemoLogin('freelancer')}
+                disabled={loading}
                 className="btn btn-sm btn-secondary"
                 style={{ fontSize: '0.78rem' }}
               >
@@ -180,6 +213,7 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
               <button 
                 type="button" 
                 onClick={() => handleQuickDemoLogin('client')}
+                disabled={loading}
                 className="btn btn-sm btn-outline-primary"
                 style={{ fontSize: '0.78rem' }}
               >
@@ -233,15 +267,13 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
             <form onSubmit={handleLoginSubmit}>
               <div className="form-group">
                 <label className="form-label">Email Address</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="email"
-                    placeholder="name@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="form-input"
-                  />
-                </div>
+                <input 
+                  type="email"
+                  placeholder="name@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="form-input"
+                />
                 {errors.email && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.email}</span>}
               </div>
 
@@ -270,8 +302,8 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                 <a href="#" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 500 }}>Forgot password?</a>
               </div>
 
-              <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }}>
-                <LogIn size={18} /> Log In to Account
+              <button type="submit" disabled={loading} className="btn btn-primary btn-lg" style={{ width: '100%' }}>
+                <LogIn size={18} /> {loading ? 'Logging in...' : 'Log In to Account'}
               </button>
             </form>
           )}
@@ -342,8 +374,8 @@ export default function AuthModal({ initialMode = 'login', onClose, onLoginSucce
                 {errors.agreeTerms && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.agreeTerms}</span>}
               </div>
 
-              <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }}>
-                <UserPlus size={18} /> Create Account
+              <button type="submit" disabled={loading} className="btn btn-primary btn-lg" style={{ width: '100%' }}>
+                <UserPlus size={18} /> {loading ? 'Creating account...' : 'Create Account'}
               </button>
             </form>
           )}

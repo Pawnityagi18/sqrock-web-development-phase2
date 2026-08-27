@@ -13,7 +13,17 @@ import Footer from './components/Footer';
 import Toast from './components/Toast';
 
 import { INITIAL_CATEGORIES as CATEGORIES, INITIAL_PROJECTS, INITIAL_FREELANCERS, INITIAL_PROPOSALS } from './data/mockData';
-import { apiFetchProjects, apiCreateProject, apiFetchProposals, apiSubmitProposal, checkServerHealth } from './api/client';
+import { 
+  apiFetchProjects, 
+  apiCreateProject, 
+  apiFetchProposals, 
+  apiSubmitProposal, 
+  apiAcceptProposal,
+  apiFetchContracts,
+  apiFetchMe,
+  setAuthToken,
+  checkServerHealth 
+} from './api/client';
 
 export default function App() {
   // Navigation & Role State
@@ -65,6 +75,9 @@ export default function App() {
       return INITIAL_PROPOSALS;
     }
   });
+
+  // Contracts State
+  const [contracts, setContracts] = useState([]);
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,23 +132,44 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Initial Full-Stack API Sync
+  const loadContracts = async () => {
+    const list = await apiFetchContracts();
+    setContracts(list);
+  };
+
+  // Initial Full-Stack API Sync & Auth verify
   useEffect(() => {
     const initServerSync = async () => {
       const isOnline = await checkServerHealth();
       setServerOnline(isOnline);
 
       if (isOnline) {
+        // Verify logged in user token
+        const me = await apiFetchMe();
+        if (me) {
+          setCurrentUser(me);
+          setUserRole(me.role);
+        }
+
         const remoteProjects = await apiFetchProjects(INITIAL_PROJECTS);
         if (remoteProjects && remoteProjects.length > 0) setProjects(remoteProjects);
 
         const remoteProposals = await apiFetchProposals(INITIAL_PROPOSALS);
         if (remoteProposals && remoteProposals.length > 0) setProposals(remoteProposals);
+
+        const remoteContracts = await apiFetchContracts();
+        setContracts(remoteContracts);
       }
     };
 
     initServerSync();
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadContracts();
+    }
+  }, [currentUser]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -153,53 +187,61 @@ export default function App() {
 
   // Create Project Handler
   const handleCreateProject = async (newProjData) => {
-    const newProject = {
-      id: projects.length + 1,
-      ...newProjData,
-      postedTime: 'Just now',
-      clientName: currentUser ? currentUser.name : 'Nexus Innovations',
-      clientCompany: currentUser ? `${currentUser.name} Labs` : 'Nexus Innovations',
-      clientAvatar: currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
-      verifiedClient: true,
-      proposalsCount: 0,
-      status: 'Open'
-    };
+    try {
+      const newProject = {
+        title: newProjData.title,
+        description: newProjData.description,
+        category: newProjData.categoryName || newProjData.category,
+        budget: Number(newProjData.budget),
+        skills: newProjData.skills,
+        duration: newProjData.duration || '1-3 months'
+      };
 
-    const savedResult = await apiCreateProject(newProject);
-    setProjects(prev => [savedResult, ...prev]);
-    setIsPostModalOpen(false);
-    showToast('🎉 Project posted successfully on WorkPulse!');
+      const savedResult = await apiCreateProject(newProject);
+      setProjects(prev => [savedResult, ...prev]);
+      setIsPostModalOpen(false);
+      showToast('🎉 Project posted successfully on WorkPulse!');
+    } catch (err) {
+      showToast(err.message || 'Failed to post project', 'error');
+    }
   };
 
   // Submit Proposal Handler
   const handleSubmitProposal = async (proposalData) => {
-    const newProposal = {
-      id: proposals.length + 1,
-      ...proposalData,
-      freelancerName: currentUser ? currentUser.name : 'Elena Rostova',
-      freelancerAvatar: currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&auto=format&fit=crop&q=80',
-      submittedDate: 'Just now',
-      status: 'Pending'
-    };
+    try {
+      const payload = {
+        projectId: proposalData.projectId || proposalData.project,
+        coverLetter: proposalData.coverLetter,
+        bidAmount: Number(proposalData.bidAmount),
+        estimatedDays: Number(proposalData.estimatedDays || 7)
+      };
 
-    const savedResult = await apiSubmitProposal(newProposal);
-    setProposals(prev => [savedResult, ...prev]);
+      const savedResult = await apiSubmitProposal(payload);
+      setProposals(prev => [savedResult, ...prev]);
 
-    // Update project proposal count locally
-    setProjects(prev => prev.map(p => p.id === proposalData.projectId ? { ...p, proposalsCount: p.proposalsCount + 1 } : p));
-
-    setSelectedProject(null);
-    showToast('🚀 Proposal submitted successfully to employer!');
+      setSelectedProject(null);
+      showToast('🚀 Proposal submitted successfully to employer!');
+    } catch (err) {
+      showToast(err.message || 'Failed to submit proposal', 'error');
+    }
   };
 
   // Accept / Decline Proposal Handler
-  const handleAcceptProposal = (proposalId) => {
-    setProposals(prev => prev.map(p => p.id === proposalId ? { ...p, status: 'Accepted' } : p));
-    showToast('Contract Accepted! Freelancer has been notified.', 'success');
+  const handleAcceptProposal = async (proposalId) => {
+    try {
+      const res = await apiAcceptProposal(proposalId);
+      setProposals(prev => prev.map(p => (p._id === proposalId || p.id === proposalId) ? { ...p, status: 'Accepted' } : p));
+      await loadContracts();
+      showToast('🎉 Proposal accepted! Escrow contract initialized successfully.', 'success');
+    } catch (err) {
+      // Fallback local update
+      setProposals(prev => prev.map(p => (p._id === proposalId || p.id === proposalId) ? { ...p, status: 'Accepted' } : p));
+      showToast('Contract Accepted!', 'success');
+    }
   };
 
   const handleRejectProposal = (proposalId) => {
-    setProposals(prev => prev.map(p => p.id === proposalId ? { ...p, status: 'Declined' } : p));
+    setProposals(prev => prev.map(p => (p._id === proposalId || p.id === proposalId) ? { ...p, status: 'Declined' } : p));
     showToast('Proposal declined.', 'info');
   };
 
@@ -209,15 +251,20 @@ export default function App() {
     setUserRole(userObj.role);
     setAuthModalConfig({ isOpen: false, mode: 'login' });
     showToast(msg || `Welcome back, ${userObj.name}!`);
+    loadContracts();
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setAuthToken(null);
+    setContracts([]);
     showToast('Logged out successfully', 'info');
   };
 
   const handleDeleteAccount = () => {
     setCurrentUser(null);
+    setAuthToken(null);
+    setContracts([]);
     localStorage.removeItem('workpulse_user');
     showToast('Your account has been deleted permanently.', 'info');
   };
@@ -300,13 +347,16 @@ export default function App() {
             userRole={userRole}
             projects={projects}
             proposals={proposals}
+            contracts={contracts}
+            currentUser={currentUser}
             onAcceptProposal={handleAcceptProposal}
             onRejectProposal={handleRejectProposal}
             onUpdateProjectStatus={(id, status) => {
-              setProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p));
+              setProjects(prev => prev.map(p => (p._id === id || p.id === id) ? { ...p, status } : p));
               showToast(`Project status updated to ${status}`);
             }}
             onOpenProjectModal={(proj) => setSelectedProject(proj)}
+            onRefreshContracts={loadContracts}
           />
         )}
 

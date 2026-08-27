@@ -7,6 +7,8 @@ import authRoutes from './routes/authRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
 import proposalRoutes from './routes/proposalRoutes.js';
 import freelancerRoutes from './routes/freelancerRoutes.js';
+import contractRoutes from './routes/contractRoutes.js';
+import messageRoutes from './routes/messageRoutes.js';
 
 dotenv.config();
 
@@ -30,6 +32,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/freelancers', freelancerRoutes);
+app.use('/api/contracts', contractRoutes);
+app.use('/api/messages', messageRoutes);
 
 app.listen(PORT, () => {
   console.log(`🚀 WorkPulse Full-Stack Server running at http://localhost:${PORT}`);
