@@ -3,6 +3,7 @@ import Proposal from '../models/Proposal.js';
 import Project from '../models/Project.js';
 import Contract from '../models/Contract.js';
 import { protect, requireRole } from '../middleware/authMiddleware.js';
+import { createNotification } from './notificationRoutes.js';
 
 const router = express.Router();
 
@@ -60,6 +61,13 @@ router.post('/', protect, requireRole('freelancer'), async (req, res) => {
       .populate('project', 'title category budget status')
       .populate('freelancer', 'name email avatar title rating');
 
+    await createNotification(
+      project.client,
+      'proposal_received',
+      `${populated.freelancer.name} submitted a proposal on "${project.title}"`,
+      '/dashboard?tab=posted-jobs'
+    );
+
     res.status(201).json({ success: true, proposal: populated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -99,6 +107,14 @@ router.post('/:id/accept', protect, requireRole('client'), async (req, res) => {
         status: 'pending'
       }]
     });
+
+    // Notify freelancer
+    await createNotification(
+      proposal.freelancer,
+      'proposal_accepted',
+      `Your proposal on "${proposal.project.title}" was accepted! A contract has been created.`,
+      '/dashboard?tab=contracts'
+    );
 
     res.json({ success: true, message: 'Proposal accepted and contract initialized', proposal, contract });
   } catch (error) {

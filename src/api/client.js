@@ -1,8 +1,14 @@
 // WorkPulse Resilient API Client with JWT Auth & Automatic Fallbacks
 
-const API_BASE_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-  ? 'http://localhost:5000/api'
-  : '/api';
+// In production, the frontend (e.g. Vercel) and backend (e.g. Render) usually
+// live on different domains, so a relative '/api' path would wrongly hit the
+// frontend's own domain. Set VITE_API_URL in your deployment platform's env
+// vars to the deployed backend's URL (e.g. https://workpulse-backend.onrender.com/api).
+const API_BASE_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL
+  : (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:5000/api'
+    : '/api');
 
 export const getAuthToken = () => {
   if (typeof window !== 'undefined') {
@@ -207,15 +213,43 @@ export const apiFetchContracts = async () => {
   return [];
 };
 
+// Starts a Stripe Checkout session for a milestone. Returns { url } — the caller
+// must redirect the browser there; funding is only confirmed once Stripe redirects
+// back and verify-session (or the webhook) marks it funded.
 export const apiFundMilestone = async (contractId, milestoneId) => {
-  const result = await safeFetchJson(`${API_BASE_URL}/contracts/${contractId}/milestones/${milestoneId}/fund`, {
+  const result = await safeFetchJson(`${API_BASE_URL}/payments/contracts/${contractId}/milestones/${milestoneId}/checkout`, {
     method: 'POST',
     headers: getHeaders()
   });
-  if (result.ok && result.data && result.data.contract) {
-    return result.data.contract;
+  if (result.ok && result.data && result.data.url) {
+    return { url: result.data.url };
   }
-  throw new Error('Funding milestone failed');
+  throw new Error(result.data?.message || 'Starting checkout failed');
+};
+
+export const apiVerifyPaymentSession = async (sessionId) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/payments/verify-session?session_id=${encodeURIComponent(sessionId)}`, {
+    headers: getHeaders(false)
+  });
+  return result.ok ? result.data : { success: false, funded: false };
+};
+
+export const apiStartPayoutOnboarding = async () => {
+  const result = await safeFetchJson(`${API_BASE_URL}/payments/connect/onboarding`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  if (result.ok && result.data && result.data.url) {
+    return { url: result.data.url };
+  }
+  throw new Error(result.data?.message || 'Could not start payout setup');
+};
+
+export const apiGetPayoutStatus = async () => {
+  const result = await safeFetchJson(`${API_BASE_URL}/payments/connect/status`, {
+    headers: getHeaders(false)
+  });
+  return result.ok ? result.data : { onboardingComplete: false };
 };
 
 export const apiSubmitMilestone = async (contractId, milestoneId, submissionNotes) => {
@@ -266,4 +300,96 @@ export const apiSendMessage = async (contractId, content) => {
     content,
     createdAt: new Date().toISOString()
   };
+};
+
+// ---- Notifications ----
+
+export const apiFetchNotifications = async () => {
+  const result = await safeFetchJson(`${API_BASE_URL}/notifications`, { headers: getHeaders(false) });
+  return result.ok ? result.data : { notifications: [], unreadCount: 0 };
+};
+
+export const apiMarkNotificationRead = async (id) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/notifications/${id}/read`, {
+    method: 'PATCH',
+    headers: getHeaders(false)
+  });
+  return result.ok;
+};
+
+export const apiMarkAllNotificationsRead = async () => {
+  const result = await safeFetchJson(`${API_BASE_URL}/notifications/read-all`, {
+    method: 'PATCH',
+    headers: getHeaders(false)
+  });
+  return result.ok;
+};
+
+// ---- Avatar upload ----
+
+export const apiUploadAvatar = async (file) => {
+  const formData = new FormData();
+  formData.append('avatar', file);
+  const token = getAuthToken();
+  const result = await safeFetchJson(`${API_BASE_URL}/uploads/avatar`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {}, // no Content-Type — browser sets multipart boundary
+    body: formData
+  });
+  if (result.ok && result.data) return result.data;
+  throw new Error(result.data?.message || 'Upload failed');
+};
+
+// ---- Reviews ----
+
+export const apiSubmitReview = async (contractId, rating, comment) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/reviews`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ contractId, rating, comment })
+  });
+  if (result.ok && result.data) return result.data;
+  throw new Error(result.data?.message || 'Could not submit review');
+};
+
+export const apiFetchUserReviews = async (userId) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/reviews/user/${userId}`, { headers: getHeaders(false) });
+  return result.ok ? (result.data.reviews || []) : [];
+};
+
+export const apiCheckAlreadyReviewed = async (contractId) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/reviews/contract/${contractId}`, { headers: getHeaders(false) });
+  return result.ok ? result.data.alreadyReviewed : false;
+};
+
+// ---- Password reset ----
+
+export const apiForgotPassword = async (email) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ email })
+  });
+  return result.ok ? result.data : { success: false, message: result.data?.message || 'Something went wrong.' };
+};
+
+export const apiResetPassword = async (token, password) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ token, password })
+  });
+  return result.ok ? result.data : { success: false, message: result.data?.message || 'Reset failed.' };
+};
+
+// ---- Contract dispute ----
+
+export const apiRaiseDispute = async (contractId, reason) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/contracts/${contractId}/dispute`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ reason })
+  });
+  if (result.ok && result.data) return result.data;
+  throw new Error(result.data?.message || 'Could not raise dispute');
 };

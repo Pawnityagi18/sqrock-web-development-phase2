@@ -11,7 +11,11 @@ const milestoneSchema = new mongoose.Schema({
   },
   submissionNotes: { type: String },
   fundedAt: { type: Date },
-  releasedAt: { type: Date }
+  releasedAt: { type: Date },
+  platformFee: { type: Number, default: 0 },
+  stripeCheckoutSessionId: { type: String },
+  stripePaymentIntentId: { type: String },
+  stripeTransferId: { type: String }
 }, { timestamps: true });
 
 const contractSchema = new mongoose.Schema({
@@ -23,9 +27,12 @@ const contractSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true },
   status: {
     type: String,
-    enum: ['active', 'completed', 'cancelled'],
+    enum: ['active', 'completed', 'cancelled', 'disputed'],
     default: 'active'
   },
+  disputeReason: { type: String },
+  disputeRaisedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  disputeResolution: { type: String },
   milestones: [milestoneSchema]
 }, { timestamps: true });
 

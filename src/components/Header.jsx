@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Trash2, Menu, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Trash2, Menu, X, Bell, Camera } from 'lucide-react';
+import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiUploadAvatar } from '../api/client';
 
 export default function Header({ 
   activeTab, 
@@ -12,10 +13,64 @@ export default function Header({
   currentUser,
   onOpenAuthModal,
   onLogout,
-  onDeleteAccount
+  onDeleteAccount,
+  onUpdateUser
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!currentUser || !currentUser.loggedIn) return;
+    const loadNotifications = () => {
+      apiFetchNotifications().then((data) => {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      });
+    };
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 30000); // poll every 30s
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  const handleNotifClick = async (notif) => {
+    if (!notif.read) {
+      await apiMarkNotificationRead(notif._id);
+      setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    }
+    if (notif.link) {
+      setActiveTab('dashboard');
+    }
+    setNotifDropdownOpen(false);
+  };
+
+  const handleMarkAllRead = async () => {
+    await apiMarkAllNotificationsRead();
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setUnreadCount(0);
+  };
+
+  const handleAvatarFileSelected = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const result = await apiUploadAvatar(file);
+      if (result.avatar && onUpdateUser) {
+        onUpdateUser({ ...currentUser, avatar: result.avatar });
+      }
+    } catch (err) {
+      alert(err.message || 'Avatar upload failed');
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
 
   const handleDeleteAccountClick = () => {
     if (window.confirm('⚠️ Are you sure you want to permanently delete your account? This action cannot be undone.')) {
@@ -214,7 +269,71 @@ export default function Header({
             )}
           </div>
 
-          {/* User Auth Section */}
+          {/* Notification Bell */}
+          {currentUser && currentUser.loggedIn && (
+            <div style={{ position: 'relative' }}>
+              <div
+                onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                style={{ position: 'relative', cursor: 'pointer', padding: '0.5rem' }}
+              >
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '0', right: '0',
+                    backgroundColor: 'var(--accent-rose, #f43f5e)', color: '#FFF',
+                    fontSize: '0.65rem', fontWeight: 700, width: '16px', height: '16px',
+                    borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </div>
+
+              {notifDropdownOpen && (
+                <div style={{
+                  position: 'absolute', top: '110%', right: 0, width: '320px', maxHeight: '400px', overflowY: 'auto',
+                  background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', zIndex: 1000
+                }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-subtle)'
+                  }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Notifications</span>
+                    {unreadCount > 0 && (
+                      <button onClick={handleMarkAllRead} style={{
+                        background: 'none', border: 'none', color: 'var(--primary)',
+                        fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600
+                      }}>
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      No notifications yet
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n._id}
+                        onClick={() => handleNotifClick(n)}
+                        style={{
+                          padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-subtle)',
+                          cursor: 'pointer', background: n.read ? 'transparent' : 'var(--bg-input)'
+                        }}
+                      >
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{n.message}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.2rem' }}>
+                          {new Date(n.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {currentUser && currentUser.loggedIn ? (
             <div style={{ position: 'relative' }}>
               <div 
@@ -273,6 +392,22 @@ export default function Header({
                   >
                     <LayoutDashboard size={14} /> My Dashboard
                   </button>
+
+                  <button
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="btn btn-secondary btn-sm"
+                    style={{ justifyContent: 'flex-start' }}
+                  >
+                    <Camera size={14} /> {uploadingAvatar ? 'Uploading…' : 'Change Photo'}
+                  </button>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={handleAvatarFileSelected}
+                    style={{ display: 'none' }}
+                  />
 
                   <button 
                     onClick={() => { onLogout(); setProfileDropdownOpen(false); }}

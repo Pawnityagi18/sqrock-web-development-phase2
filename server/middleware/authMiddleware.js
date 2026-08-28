@@ -3,6 +3,10 @@ import User from '../models/User.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'workpulse_jwt_secret_key_2026';
 
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️  JWT_SECRET is not set in .env — using an insecure default. Set a real value before deploying.');
+}
+
 export const protect = async (req, res, next) => {
   let token;
 

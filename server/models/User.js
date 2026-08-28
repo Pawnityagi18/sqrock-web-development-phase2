@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true, select: false },
-  role: { type: String, enum: ['freelancer', 'client'], required: true },
+  role: { type: String, enum: ['freelancer', 'client', 'admin'], required: true },
   avatar: { type: String },
   title: { type: String },
   rating: { type: Number, default: 5.0 },
@@ -13,7 +13,11 @@ const userSchema = new mongoose.Schema({
   hourlyRate: { type: Number },
   jobSuccessRate: { type: Number, default: 100 },
   skills: [{ type: String }],
-  bio: { type: String }
+  bio: { type: String },
+  stripeAccountId: { type: String },
+  stripeOnboardingComplete: { type: Boolean, default: false },
+  resetPasswordToken: { type: String, select: false },
+  resetPasswordExpires: { type: Date, select: false }
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

@@ -1,0 +1,2061 @@
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..66c8271
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,25 @@
++# Copy this file to .env and fill in real values. Never commit .env itself.
++
++# MongoDB connection string (local or MongoDB Atlas)
++MONGODB_URI=mongodb://localhost:27017/workpulse
++
++# Long random string used to sign JWTs. Generate one with:
++# node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
++# If this is left unset, the server falls back to an insecure default and
++# prints a warning on startup — always set a real value outside local dev.
++JWT_SECRET=replace-this-with-a-long-random-string
++
++# Port for the Express server
++PORT=5000
++
++# Stripe TEST-MODE keys (get these from https://dashboard.stripe.com/test/apikeys)
++STRIPE_SECRET_KEY=sk_test_...
++
++# Webhook signing secret — when testing locally, run:
++#   stripe listen --forward-to localhost:5000/api/payments/webhook
++# and paste the "whsec_..." it prints here.
++STRIPE_WEBHOOK_SECRET=whsec_...
++
++# Base URL of your running frontend, used for Stripe redirect/onboarding return links.
++# Defaults to the request's own origin if omitted.
++FRONTEND_URL=http://localhost:5173
+diff --git a/.gitignore b/.gitignore
+index a547bf3..66b5c9f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -12,6 +12,15 @@ dist
+ dist-ssr
+ *.local
+ 
++# Environment variables (contains DB/JWT/Stripe secrets — never commit)
++.env
++.env.*
++!.env.example
++
++# User-uploaded files (avatars, etc.) — created at runtime, not committed
++server/uploads/*
++!server/uploads/.gitkeep
++
+ # Editor directories and files
+ .vscode/*
+ !.vscode/extensions.json
+diff --git a/package-lock.json b/package-lock.json
+index f84eb39..f18b4e3 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -12,11 +12,16 @@
+         "cors": "^2.8.6",
+         "dotenv": "^17.4.2",
+         "express": "^5.2.1",
++        "express-rate-limit": "^7.4.1",
++        "helmet": "^8.0.0",
+         "jsonwebtoken": "^9.0.3",
+         "lucide-react": "^1.29.0",
+         "mongoose": "^9.9.1",
++        "multer": "^1.4.5-lts.1",
++        "nodemailer": "^6.9.16",
+         "react": "^19.2.8",
+-        "react-dom": "^19.2.8"
++        "react-dom": "^19.2.8",
++        "stripe": "^17.4.0"
+       },
+       "devDependencies": {
+         "@types/react": "^19.2.17",
+@@ -621,6 +626,15 @@
+       "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==",
+       "license": "MIT"
+     },
++    "node_modules/@types/node": {
++      "version": "26.4.0",
++      "resolved": "https://registry.npmjs.org/@types/node/-/node-26.4.0.tgz",
++      "integrity": "sha512-faiGnoIrLH/V8cibOMEAZ8pMw6oXqSukl29ra4mN8GdaB2ZewzeaLj+INpV5N+Z1eKWzY+IzaIZH2EIR6YZRNQ==",
++      "license": "MIT",
++      "dependencies": {
++        "undici-types": "~8.3.0"
++      }
++    },
+     "node_modules/@types/react": {
+       "version": "19.2.18",
+       "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.18.tgz",
+@@ -748,6 +762,12 @@
+         "url": "https://github.com/sponsors/jonschlinkert"
+       }
+     },
++    "node_modules/append-field": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/append-field/-/append-field-1.0.0.tgz",
++      "integrity": "sha512-klpgFSWLW1ZEs8svjfb7g4qWY0YS5imI82dTg+QahUvJ8YqAY0P10Uk8tTyh9ZGuYEZEMaeJYCF5BFuX552hsw==",
++      "license": "MIT"
++    },
+     "node_modules/balanced-match": {
+       "version": "4.0.4",
+       "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-4.0.4.tgz",
+@@ -858,6 +878,23 @@
+       "integrity": "sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==",
+       "license": "BSD-3-Clause"
+     },
++    "node_modules/buffer-from": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/buffer-from/-/buffer-from-1.1.2.tgz",
++      "integrity": "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==",
++      "license": "MIT"
++    },
++    "node_modules/busboy": {
++      "version": "1.6.0",
++      "resolved": "https://registry.npmjs.org/busboy/-/busboy-1.6.0.tgz",
++      "integrity": "sha512-8SFQbg/0hQ9xy3UNTB0YEnsNBbWfhf7RtnzpL7TkBiTBRfrQ9Fxcnz7VJsleJpyp6rVLvXiuORqjlHi5q+PYuA==",
++      "dependencies": {
++        "streamsearch": "^1.1.0"
++      },
++      "engines": {
++        "node": ">=10.16.0"
++      }
++    },
+     "node_modules/bytes": {
+       "version": "3.1.2",
+       "resolved": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz",
+@@ -949,6 +986,21 @@
+         "node": ">=20"
+       }
+     },
++    "node_modules/concat-stream": {
++      "version": "1.6.2",
++      "resolved": "https://registry.npmjs.org/concat-stream/-/concat-stream-1.6.2.tgz",
++      "integrity": "sha512-27HBghJxjiZtIk3Ycvn/4kbJk/1uZuJFfuPEns6LaEvpvG1f0hTea8lilrouyo9mVc2GWdcEZ8OLoGmSADlrCw==",
++      "engines": [
++        "node >= 0.8"
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "buffer-from": "^1.0.0",
++        "inherits": "^2.0.3",
++        "readable-stream": "^2.2.2",
++        "typedarray": "^0.0.6"
++      }
++    },
+     "node_modules/concurrently": {
+       "version": "10.0.4",
+       "resolved": "https://registry.npmjs.org/concurrently/-/concurrently-10.0.4.tgz",
+@@ -1014,6 +1066,12 @@
+         "node": ">=6.6.0"
+       }
+     },
++    "node_modules/core-util-is": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/core-util-is/-/core-util-is-1.0.3.tgz",
++      "integrity": "sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==",
++      "license": "MIT"
++    },
+     "node_modules/cors": {
+       "version": "2.8.6",
+       "resolved": "https://registry.npmjs.org/cors/-/cors-2.8.6.tgz",
+@@ -1229,6 +1287,21 @@
+         "url": "https://opencollective.com/express"
+       }
+     },
++    "node_modules/express-rate-limit": {
++      "version": "7.5.1",
++      "resolved": "https://registry.npmjs.org/express-rate-limit/-/express-rate-limit-7.5.1.tgz",
++      "integrity": "sha512-7iN8iPMDzOMHPUYllBEsQdWVB6fPDMPqwjBaFrgr4Jgr/+okjvzAy+UHlYYL/Vs0OsOrMkwS6PJDkFlJwoxUnw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 16"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/express-rate-limit"
++      },
++      "peerDependencies": {
++        "express": ">= 4.11"
++      }
++    },
+     "node_modules/fdir": {
+       "version": "6.5.0",
+       "resolved": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz",
+@@ -1442,6 +1515,18 @@
+         "node": ">= 0.4"
+       }
+     },
++    "node_modules/helmet": {
++      "version": "8.3.0",
++      "resolved": "https://registry.npmjs.org/helmet/-/helmet-8.3.0.tgz",
++      "integrity": "sha512-Qgpiaws3Sm30Av8Eah6sjMCZZwjlBu+E68rhpCWBshY1lb09HtLwj5GviX0OyQIn+ulUS0iX0AxN5n3tLZzz1w==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=18.0.0"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/EvanHahn"
++      }
++    },
+     "node_modules/http-errors": {
+       "version": "2.0.1",
+       "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz",
+@@ -1552,6 +1637,12 @@
+       "integrity": "sha512-hvpoI6korhJMnej285dSg6nu1+e6uxs7zG3BYAm5byqDsgJNWwxzM6z6iZiAgQR4TJ30JmBTOwqZUw3WlyH3AQ==",
+       "license": "MIT"
+     },
++    "node_modules/isarray": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/isarray/-/isarray-1.0.0.tgz",
++      "integrity": "sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==",
++      "license": "MIT"
++    },
+     "node_modules/jsonwebtoken": {
+       "version": "9.0.3",
+       "resolved": "https://registry.npmjs.org/jsonwebtoken/-/jsonwebtoken-9.0.3.tgz",
+@@ -1997,6 +2088,27 @@
+         "url": "https://github.com/sponsors/isaacs"
+       }
+     },
++    "node_modules/minimist": {
++      "version": "1.2.8",
++      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz",
++      "integrity": "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/ljharb"
++      }
++    },
++    "node_modules/mkdirp": {
++      "version": "0.5.6",
++      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.6.tgz",
++      "integrity": "sha512-FP+p8RB8OWpF3YZBCrP5gtADmtXApB5AMLn+vdyA+PyxCjrCs00mjyUozssO33cwDeT3wNGdLxJ5M//YqtHAJw==",
++      "license": "MIT",
++      "dependencies": {
++        "minimist": "^1.2.6"
++      },
++      "bin": {
++        "mkdirp": "bin/cmd.js"
++      }
++    },
+     "node_modules/mongodb": {
+       "version": "7.5.0",
+       "resolved": "https://registry.npmjs.org/mongodb/-/mongodb-7.5.0.tgz",
+@@ -2102,6 +2214,68 @@
+       "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+       "license": "MIT"
+     },
++    "node_modules/multer": {
++      "version": "1.4.5-lts.2",
++      "resolved": "https://registry.npmjs.org/multer/-/multer-1.4.5-lts.2.tgz",
++      "integrity": "sha512-VzGiVigcG9zUAoCNU+xShztrlr1auZOlurXynNvO9GiWD1/mTBbUljOKY+qMeazBqXgRnjzeEgJI/wyjJUHg9A==",
++      "deprecated": "Multer 1.x is impacted by a number of vulnerabilities, which have been patched in 2.x. You should upgrade to the latest 2.x version.",
++      "license": "MIT",
++      "dependencies": {
++        "append-field": "^1.0.0",
++        "busboy": "^1.0.0",
++        "concat-stream": "^1.5.2",
++        "mkdirp": "^0.5.4",
++        "object-assign": "^4.1.1",
++        "type-is": "^1.6.4",
++        "xtend": "^4.0.0"
++      },
++      "engines": {
++        "node": ">= 6.0.0"
++      }
++    },
++    "node_modules/multer/node_modules/media-typer": {
++      "version": "0.3.0",
++      "resolved": "https://registry.npmjs.org/media-typer/-/media-typer-0.3.0.tgz",
++      "integrity": "sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/multer/node_modules/mime-db": {
++      "version": "1.52.0",
++      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
++      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/multer/node_modules/mime-types": {
++      "version": "2.1.35",
++      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
++      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
++      "license": "MIT",
++      "dependencies": {
++        "mime-db": "1.52.0"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
++    "node_modules/multer/node_modules/type-is": {
++      "version": "1.6.18",
++      "resolved": "https://registry.npmjs.org/type-is/-/type-is-1.6.18.tgz",
++      "integrity": "sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==",
++      "license": "MIT",
++      "dependencies": {
++        "media-typer": "0.3.0",
++        "mime-types": "~2.1.24"
++      },
++      "engines": {
++        "node": ">= 0.6"
++      }
++    },
+     "node_modules/nanoid": {
+       "version": "3.3.17",
+       "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.17.tgz",
+@@ -2130,6 +2304,15 @@
+         "node": ">= 0.6"
+       }
+     },
++    "node_modules/nodemailer": {
++      "version": "6.10.1",
++      "resolved": "https://registry.npmjs.org/nodemailer/-/nodemailer-6.10.1.tgz",
++      "integrity": "sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==",
++      "license": "MIT-0",
++      "engines": {
++        "node": ">=6.0.0"
++      }
++    },
+     "node_modules/nodemon": {
+       "version": "3.1.14",
+       "resolved": "https://registry.npmjs.org/nodemon/-/nodemon-3.1.14.tgz",
+@@ -2341,6 +2524,12 @@
+         "node": "^10 || ^12 || >=14"
+       }
+     },
++    "node_modules/process-nextick-args": {
++      "version": "2.0.1",
++      "resolved": "https://registry.npmjs.org/process-nextick-args/-/process-nextick-args-2.0.1.tgz",
++      "integrity": "sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==",
++      "license": "MIT"
++    },
+     "node_modules/proxy-addr": {
+       "version": "2.0.7",
+       "resolved": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.7.tgz",
+@@ -2435,6 +2624,27 @@
+         "react": "^19.2.8"
+       }
+     },
++    "node_modules/readable-stream": {
++      "version": "2.3.8",
++      "resolved": "https://registry.npmjs.org/readable-stream/-/readable-stream-2.3.8.tgz",
++      "integrity": "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==",
++      "license": "MIT",
++      "dependencies": {
++        "core-util-is": "~1.0.0",
++        "inherits": "~2.0.3",
++        "isarray": "~1.0.0",
++        "process-nextick-args": "~2.0.0",
++        "safe-buffer": "~5.1.1",
++        "string_decoder": "~1.1.1",
++        "util-deprecate": "~1.0.1"
++      }
++    },
++    "node_modules/readable-stream/node_modules/safe-buffer": {
++      "version": "5.1.2",
++      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.1.2.tgz",
++      "integrity": "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==",
++      "license": "MIT"
++    },
+     "node_modules/readdirp": {
+       "version": "3.6.0",
+       "resolved": "https://registry.npmjs.org/readdirp/-/readdirp-3.6.0.tgz",
+@@ -2747,6 +2957,29 @@
+         "node": ">= 0.8"
+       }
+     },
++    "node_modules/streamsearch": {
++      "version": "1.1.0",
++      "resolved": "https://registry.npmjs.org/streamsearch/-/streamsearch-1.1.0.tgz",
++      "integrity": "sha512-Mcc5wHehp9aXz1ax6bZUyY5afg9u2rv5cqQI3mRrYkGC8rW2hM02jWuwjtL++LS5qinSyhj2QfLyNsuc+VsExg==",
++      "engines": {
++        "node": ">=10.0.0"
++      }
++    },
++    "node_modules/string_decoder": {
++      "version": "1.1.1",
++      "resolved": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.1.1.tgz",
++      "integrity": "sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==",
++      "license": "MIT",
++      "dependencies": {
++        "safe-buffer": "~5.1.0"
++      }
++    },
++    "node_modules/string_decoder/node_modules/safe-buffer": {
++      "version": "5.1.2",
++      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.1.2.tgz",
++      "integrity": "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==",
++      "license": "MIT"
++    },
+     "node_modules/string-width": {
+       "version": "7.2.0",
+       "resolved": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+@@ -2781,6 +3014,19 @@
+         "url": "https://github.com/chalk/strip-ansi?sponsor=1"
+       }
+     },
++    "node_modules/stripe": {
++      "version": "17.7.0",
++      "resolved": "https://registry.npmjs.org/stripe/-/stripe-17.7.0.tgz",
++      "integrity": "sha512-aT2BU9KkizY9SATf14WhhYVv2uOapBWX0OFWF4xvcj1mPaNotlSc2CsxpS4DS46ZueSppmCF5BX1sNYBtwBvfw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": ">=8.1.0",
++        "qs": "^6.11.0"
++      },
++      "engines": {
++        "node": ">=12.*"
++      }
++    },
+     "node_modules/supports-color": {
+       "version": "10.2.2",
+       "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-10.2.2.tgz",
+@@ -2903,6 +3149,12 @@
+         "url": "https://opencollective.com/express"
+       }
+     },
++    "node_modules/typedarray": {
++      "version": "0.0.6",
++      "resolved": "https://registry.npmjs.org/typedarray/-/typedarray-0.0.6.tgz",
++      "integrity": "sha512-/aCDEGatGvZ2BIk+HmLf4ifCJFwvKFNb9/JeZPMulfgFracn9QFcAf5GO8B/mweUjSoblS5In0cWhqpfs/5PQA==",
++      "license": "MIT"
++    },
+     "node_modules/undefsafe": {
+       "version": "2.0.5",
+       "resolved": "https://registry.npmjs.org/undefsafe/-/undefsafe-2.0.5.tgz",
+@@ -2910,6 +3162,12 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/undici-types": {
++      "version": "8.3.0",
++      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-8.3.0.tgz",
++      "integrity": "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==",
++      "license": "MIT"
++    },
+     "node_modules/unpipe": {
+       "version": "1.0.0",
+       "resolved": "https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz",
+@@ -2919,6 +3177,12 @@
+         "node": ">= 0.8"
+       }
+     },
++    "node_modules/util-deprecate": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
++      "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==",
++      "license": "MIT"
++    },
+     "node_modules/vary": {
+       "version": "1.1.2",
+       "resolved": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz",
+@@ -3052,6 +3316,15 @@
+       "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
+       "license": "ISC"
+     },
++    "node_modules/xtend": {
++      "version": "4.0.2",
++      "resolved": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
++      "integrity": "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.4"
++      }
++    },
+     "node_modules/y18n": {
+       "version": "5.0.8",
+       "resolved": "https://registry.npmjs.org/y18n/-/y18n-5.0.8.tgz",
+diff --git a/package.json b/package.json
+index fa99e7f..7f86136 100644
+--- a/package.json
++++ b/package.json
+@@ -16,11 +16,16 @@
+     "cors": "^2.8.6",
+     "dotenv": "^17.4.2",
+     "express": "^5.2.1",
++    "express-rate-limit": "^7.4.1",
++    "helmet": "^8.0.0",
+     "jsonwebtoken": "^9.0.3",
+     "lucide-react": "^1.29.0",
+     "mongoose": "^9.9.1",
++    "multer": "^1.4.5-lts.1",
++    "nodemailer": "^6.9.16",
+     "react": "^19.2.8",
+-    "react-dom": "^19.2.8"
++    "react-dom": "^19.2.8",
++    "stripe": "^17.4.0"
+   },
+   "devDependencies": {
+     "@types/react": "^19.2.17",
+diff --git a/server/config/mailer.js b/server/config/mailer.js
+new file mode 100644
+index 0000000..6a8f453
+--- /dev/null
++++ b/server/config/mailer.js
+@@ -0,0 +1,38 @@
++import nodemailer from 'nodemailer';
++
++const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
++
++let transporter = null;
++if (smtpConfigured) {
++  transporter = nodemailer.createTransport({
++    host: process.env.SMTP_HOST,
++    port: Number(process.env.SMTP_PORT) || 587,
++    secure: Number(process.env.SMTP_PORT) === 465,
++    auth: {
++      user: process.env.SMTP_USER,
++      pass: process.env.SMTP_PASS
++    }
++  });
++} else {
++  console.warn('⚠️  SMTP not configured (SMTP_HOST/SMTP_USER/SMTP_PASS) — emails will be logged to the console instead of sent. Set these in .env for real email delivery (e.g. via Gmail app password, Brevo, or Mailtrap free tiers).');
++}
++
++// Sends an email if SMTP is configured; otherwise logs it so nothing is silently lost in dev.
++export async function sendEmail({ to, subject, html, text }) {
++  if (!transporter) {
++    console.log('\n📧 [DEV EMAIL — SMTP not configured, not actually sent]');
++    console.log(`   To: ${to}`);
++    console.log(`   Subject: ${subject}`);
++    console.log(`   Body: ${text || html}\n`);
++    return { sent: false, mode: 'console' };
++  }
++
++  await transporter.sendMail({
++    from: process.env.SMTP_FROM || `"WorkPulse" <${process.env.SMTP_USER}>`,
++    to,
++    subject,
++    html,
++    text
++  });
++  return { sent: true, mode: 'smtp' };
++}
+diff --git a/server/config/stripe.js b/server/config/stripe.js
+new file mode 100644
+index 0000000..b3d3f22
+--- /dev/null
++++ b/server/config/stripe.js
+@@ -0,0 +1,11 @@
++import Stripe from 'stripe';
++
++if (!process.env.STRIPE_SECRET_KEY) {
++  console.warn('⚠️  Missing STRIPE_SECRET_KEY — payment routes will fail until it is set in .env (use a test-mode sk_test_... key).');
++}
++
++const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
++  apiVersion: '2024-06-20'
++});
++
++export default stripe;
+diff --git a/server/index.js b/server/index.js
+index 9128ed2..e43f377 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -1,7 +1,11 @@
++import 'dotenv/config'; // must run before any import that reads process.env at module load time
+ import express from 'express';
+ import cors from 'cors';
+-import dotenv from 'dotenv';
++import helmet from 'helmet';
++import path from 'path';
++import { fileURLToPath } from 'url';
+ import connectDB from './config/db.js';
++import { generalLimiter } from './middleware/rateLimiter.js';
+ 
+ import authRoutes from './routes/authRoutes.js';
+ import projectRoutes from './routes/projectRoutes.js';
+@@ -9,16 +13,37 @@ import proposalRoutes from './routes/proposalRoutes.js';
+ import freelancerRoutes from './routes/freelancerRoutes.js';
+ import contractRoutes from './routes/contractRoutes.js';
+ import messageRoutes from './routes/messageRoutes.js';
++import paymentRoutes, { handleStripeWebhook } from './routes/paymentRoutes.js';
++import reviewRoutes from './routes/reviewRoutes.js';
++import notificationRoutes from './routes/notificationRoutes.js';
++import uploadRoutes from './routes/uploadRoutes.js';
++import adminRoutes from './routes/adminRoutes.js';
+ 
+-dotenv.config();
+-
++const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const app = express();
+ const PORT = process.env.PORT || 5000;
+ 
+-// Middleware
+-app.use(cors());
++// Security middleware
++app.use(helmet({
++  crossOriginResourcePolicy: { policy: 'cross-origin' } // allow uploaded images to be loaded from a different frontend origin
++}));
++
++// Restrict CORS to the configured frontend in production; allow any origin in local dev
++// (when FRONTEND_URL isn't set) so the existing dev workflow doesn't break.
++const allowedOrigin = process.env.FRONTEND_URL;
++app.use(cors(allowedOrigin ? { origin: allowedOrigin, credentials: true } : {}));
++
++app.use('/api/', generalLimiter);
++
++// IMPORTANT: the Stripe webhook needs the raw request body to verify the signature,
++// so it must be registered BEFORE express.json() and must not be re-parsed as JSON.
++app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
++
+ app.use(express.json());
+ 
++// Serve uploaded files (avatars, etc.)
++app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
++
+ // Connect Database
+ connectDB();
+ 
+@@ -34,6 +59,11 @@ app.use('/api/proposals', proposalRoutes);
+ app.use('/api/freelancers', freelancerRoutes);
+ app.use('/api/contracts', contractRoutes);
+ app.use('/api/messages', messageRoutes);
++app.use('/api/payments', paymentRoutes);
++app.use('/api/reviews', reviewRoutes);
++app.use('/api/notifications', notificationRoutes);
++app.use('/api/uploads', uploadRoutes);
++app.use('/api/admin', adminRoutes);
+ 
+ app.listen(PORT, () => {
+   console.log(`🚀 WorkPulse Full-Stack Server running at http://localhost:${PORT}`);
+diff --git a/server/middleware/authMiddleware.js b/server/middleware/authMiddleware.js
+index 7e6074b..0019da1 100644
+--- a/server/middleware/authMiddleware.js
++++ b/server/middleware/authMiddleware.js
+@@ -3,6 +3,10 @@ import User from '../models/User.js';
+ 
+ const JWT_SECRET = process.env.JWT_SECRET || 'workpulse_jwt_secret_key_2026';
+ 
++if (!process.env.JWT_SECRET) {
++  console.warn('⚠️  JWT_SECRET is not set in .env — using an insecure default. Set a real value before deploying.');
++}
++
+ export const protect = async (req, res, next) => {
+   let token;
+ 
+diff --git a/server/middleware/rateLimiter.js b/server/middleware/rateLimiter.js
+new file mode 100644
+index 0000000..a70e8c3
+--- /dev/null
++++ b/server/middleware/rateLimiter.js
+@@ -0,0 +1,19 @@
++import rateLimit from 'express-rate-limit';
++
++// Tighter limit on auth endpoints — the main brute-force / credential-stuffing target.
++export const authLimiter = rateLimit({
++  windowMs: 15 * 60 * 1000, // 15 minutes
++  max: 20, // 20 attempts per IP per window
++  message: { success: false, message: 'Too many attempts. Please try again in a few minutes.' },
++  standardHeaders: true,
++  legacyHeaders: false
++});
++
++// Looser general limit so normal browsing/API use is never affected, just abuse/scraping.
++export const generalLimiter = rateLimit({
++  windowMs: 15 * 60 * 1000,
++  max: 300,
++  message: { success: false, message: 'Too many requests. Please slow down.' },
++  standardHeaders: true,
++  legacyHeaders: false
++});
+diff --git a/server/models/Contract.js b/server/models/Contract.js
+index c6a40bc..ff8b9ee 100644
+--- a/server/models/Contract.js
++++ b/server/models/Contract.js
+@@ -11,7 +11,11 @@ const milestoneSchema = new mongoose.Schema({
+   },
+   submissionNotes: { type: String },
+   fundedAt: { type: Date },
+-  releasedAt: { type: Date }
++  releasedAt: { type: Date },
++  platformFee: { type: Number, default: 0 },
++  stripeCheckoutSessionId: { type: String },
++  stripePaymentIntentId: { type: String },
++  stripeTransferId: { type: String }
+ }, { timestamps: true });
+ 
+ const contractSchema = new mongoose.Schema({
+@@ -23,9 +27,12 @@ const contractSchema = new mongoose.Schema({
+   totalAmount: { type: Number, required: true },
+   status: {
+     type: String,
+-    enum: ['active', 'completed', 'cancelled'],
++    enum: ['active', 'completed', 'cancelled', 'disputed'],
+     default: 'active'
+   },
++  disputeReason: { type: String },
++  disputeRaisedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
++  disputeResolution: { type: String },
+   milestones: [milestoneSchema]
+ }, { timestamps: true });
+ 
+diff --git a/server/models/Notification.js b/server/models/Notification.js
+new file mode 100644
+index 0000000..1f7c93b
+--- /dev/null
++++ b/server/models/Notification.js
+@@ -0,0 +1,21 @@
++import mongoose from 'mongoose';
++
++const notificationSchema = new mongoose.Schema({
++  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
++  type: {
++    type: String,
++    enum: [
++      'proposal_received', 'proposal_accepted', 'proposal_declined',
++      'milestone_funded', 'milestone_submitted', 'milestone_released',
++      'new_message', 'contract_disputed', 'review_received'
++    ],
++    required: true
++  },
++  message: { type: String, required: true },
++  link: { type: String }, // frontend route/hash the notification should navigate to, e.g. '/dashboard?tab=contracts'
++  read: { type: Boolean, default: false }
++}, { timestamps: true });
++
++notificationSchema.index({ user: 1, createdAt: -1 });
++
++export default mongoose.model('Notification', notificationSchema);
+diff --git a/server/models/Review.js b/server/models/Review.js
+new file mode 100644
+index 0000000..48bbd77
+--- /dev/null
++++ b/server/models/Review.js
+@@ -0,0 +1,15 @@
++import mongoose from 'mongoose';
++
++const reviewSchema = new mongoose.Schema({
++  contract: { type: mongoose.Schema.Types.ObjectId, ref: 'Contract', required: true },
++  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
++  reviewer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
++  reviewee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
++  rating: { type: Number, required: true, min: 1, max: 5 },
++  comment: { type: String, maxlength: 1000 }
++}, { timestamps: true });
++
++// One review per (contract, reviewer) — prevents someone reviewing the same contract twice
++reviewSchema.index({ contract: 1, reviewer: 1 }, { unique: true });
++
++export default mongoose.model('Review', reviewSchema);
+diff --git a/server/models/User.js b/server/models/User.js
+index 4257242..450b557 100644
+--- a/server/models/User.js
++++ b/server/models/User.js
+@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
+   name: { type: String, required: true },
+   email: { type: String, required: true, unique: true },
+   password: { type: String, required: true, select: false },
+-  role: { type: String, enum: ['freelancer', 'client'], required: true },
++  role: { type: String, enum: ['freelancer', 'client', 'admin'], required: true },
+   avatar: { type: String },
+   title: { type: String },
+   rating: { type: Number, default: 5.0 },
+@@ -13,7 +13,11 @@ const userSchema = new mongoose.Schema({
+   hourlyRate: { type: Number },
+   jobSuccessRate: { type: Number, default: 100 },
+   skills: [{ type: String }],
+-  bio: { type: String }
++  bio: { type: String },
++  stripeAccountId: { type: String },
++  stripeOnboardingComplete: { type: Boolean, default: false },
++  resetPasswordToken: { type: String, select: false },
++  resetPasswordExpires: { type: Date, select: false }
+ }, { timestamps: true });
+ 
+ userSchema.pre('save', async function (next) {
+diff --git a/server/routes/adminRoutes.js b/server/routes/adminRoutes.js
+new file mode 100644
+index 0000000..3a2b2be
+--- /dev/null
++++ b/server/routes/adminRoutes.js
+@@ -0,0 +1,65 @@
++import express from 'express';
++import User from '../models/User.js';
++import Contract from '../models/Contract.js';
++import { protect, requireRole } from '../middleware/authMiddleware.js';
++import { createNotification } from './notificationRoutes.js';
++
++const router = express.Router();
++
++// All routes here require an authenticated admin
++router.use(protect, requireRole('admin'));
++
++// GET /api/admin/users
++router.get('/users', async (req, res) => {
++  try {
++    const users = await User.find().sort({ createdAt: -1 });
++    res.json({ success: true, users });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// GET /api/admin/disputes — contracts currently flagged as disputed
++router.get('/disputes', async (req, res) => {
++  try {
++    const disputes = await Contract.find({ status: 'disputed' })
++      .populate('client', 'name email')
++      .populate('freelancer', 'name email')
++      .populate('project', 'title')
++      .populate('disputeRaisedBy', 'name email')
++      .sort({ updatedAt: -1 });
++    res.json({ success: true, disputes });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// POST /api/admin/disputes/:contractId/resolve
++// resolution: 'refund_client' | 'pay_freelancer' | 'reactivate' — refunds/payouts still
++// require manual action in the Stripe dashboard for now; this records the decision and
++// updates contract status. See README note on why automatic reversal isn't wired here.
++router.post('/disputes/:contractId/resolve', async (req, res) => {
++  try {
++    const { resolution, notes } = req.body;
++    if (!resolution) return res.status(400).json({ success: false, message: 'A resolution decision is required.' });
++
++    const contract = await Contract.findById(req.params.contractId);
++    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found.' });
++    if (contract.status !== 'disputed') {
++      return res.status(400).json({ success: false, message: 'This contract is not currently disputed.' });
++    }
++
++    contract.status = resolution === 'reactivate' ? 'active' : 'completed';
++    contract.disputeResolution = `${resolution}${notes ? `: ${notes}` : ''}`;
++    await contract.save();
++
++    await createNotification(contract.client, 'contract_disputed', `Dispute on "${contract.title}" was resolved by our team.`, '/dashboard?tab=contracts');
++    await createNotification(contract.freelancer, 'contract_disputed', `Dispute on "${contract.title}" was resolved by our team.`, '/dashboard?tab=contracts');
++
++    res.json({ success: true, contract });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++export default router;
+diff --git a/server/routes/authRoutes.js b/server/routes/authRoutes.js
+index 24f77d7..22ab0e5 100644
+--- a/server/routes/authRoutes.js
++++ b/server/routes/authRoutes.js
+@@ -1,7 +1,10 @@
+ import express from 'express';
+ import jwt from 'jsonwebtoken';
++import crypto from 'crypto';
+ import User from '../models/User.js';
+ import { protect, JWT_SECRET } from '../middleware/authMiddleware.js';
++import { sendEmail } from '../config/mailer.js';
++import { authLimiter } from '../middleware/rateLimiter.js';
+ 
+ const router = express.Router();
+ 
+@@ -15,7 +18,7 @@ router.get('/me', protect, async (req, res) => {
+ });
+ 
+ // POST /api/auth/login
+-router.post('/login', async (req, res) => {
++router.post('/login', authLimiter, async (req, res) => {
+   try {
+     const { email, password } = req.body;
+ 
+@@ -43,7 +46,7 @@ router.post('/login', async (req, res) => {
+ });
+ 
+ // POST /api/auth/signup
+-router.post('/signup', async (req, res) => {
++router.post('/signup', authLimiter, async (req, res) => {
+   try {
+     const { name, email, password, role } = req.body;
+ 
+@@ -79,4 +82,70 @@ router.post('/signup', async (req, res) => {
+   }
+ });
+ 
++// POST /api/auth/forgot-password — generates a reset token and emails a reset link.
++// Always responds with the same success message whether or not the email exists,
++// so this endpoint can't be used to check which emails are registered.
++router.post('/forgot-password', authLimiter, async (req, res) => {
++  try {
++    const { email } = req.body;
++    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
++
++    const user = await User.findOne({ email });
++    const genericResponse = { success: true, message: 'If an account with that email exists, a reset link has been sent.' };
++
++    if (!user) return res.json(genericResponse); // don't reveal whether the email exists
++
++    const rawToken = crypto.randomBytes(32).toString('hex');
++    user.resetPasswordToken = crypto.createHash('sha256').update(rawToken).digest('hex');
++    user.resetPasswordExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
++    await user.save();
++
++    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
++    const resetUrl = `${frontendUrl}/?resetToken=${rawToken}`;
++
++    await sendEmail({
++      to: user.email,
++      subject: 'Reset your WorkPulse password',
++      text: `You requested a password reset. Click this link (valid for 30 minutes): ${resetUrl}\n\nIf you didn't request this, ignore this email.`,
++      html: `<p>You requested a password reset. This link is valid for 30 minutes:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you didn't request this, ignore this email.</p>`
++    });
++
++    res.json(genericResponse);
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// POST /api/auth/reset-password — sets a new password given a valid, unexpired token
++router.post('/reset-password', authLimiter, async (req, res) => {
++  try {
++    const { token, password } = req.body;
++    if (!token || !password) {
++      return res.status(400).json({ success: false, message: 'Token and new password are required.' });
++    }
++    if (password.length < 6) {
++      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
++    }
++
++    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
++    const user = await User.findOne({
++      resetPasswordToken: hashedToken,
++      resetPasswordExpires: { $gt: new Date() }
++    }).select('+resetPasswordToken +resetPasswordExpires');
++
++    if (!user) {
++      return res.status(400).json({ success: false, message: 'Reset link is invalid or has expired.' });
++    }
++
++    user.password = password; // re-hashed automatically by the pre-save hook
++    user.resetPasswordToken = undefined;
++    user.resetPasswordExpires = undefined;
++    await user.save();
++
++    res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
+ export default router;
+diff --git a/server/routes/contractRoutes.js b/server/routes/contractRoutes.js
+index bdc2032..3aa8671 100644
+--- a/server/routes/contractRoutes.js
++++ b/server/routes/contractRoutes.js
+@@ -1,6 +1,11 @@
+ import express from 'express';
+ import Contract from '../models/Contract.js';
++import User from '../models/User.js';
++import stripe from '../config/stripe.js';
+ import { protect } from '../middleware/authMiddleware.js';
++import { createNotification } from './notificationRoutes.js';
++
++const PLATFORM_FEE_PERCENT = 10; // WorkPulse's cut on each released milestone
+ 
+ const router = express.Router();
+ 
+@@ -47,32 +52,11 @@ router.get('/:id', protect, async (req, res) => {
+   }
+ });
+ 
+-// POST /api/contracts/:id/milestones/:milestoneId/fund - Client funds milestone (Escrow)
+-router.post('/:id/milestones/:milestoneId/fund', protect, async (req, res) => {
+-  try {
+-    const contract = await Contract.findById(req.params.id);
+-    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found' });
+-
+-    if (contract.client.toString() !== req.user._id.toString()) {
+-      return res.status(403).json({ success: false, message: 'Only client can fund milestone' });
+-    }
+-
+-    const milestone = contract.milestones.id(req.params.milestoneId);
+-    if (!milestone) return res.status(404).json({ success: false, message: 'Milestone not found' });
+-
+-    if (milestone.status !== 'pending') {
+-      return res.status(400).json({ success: false, message: `Milestone is already ${milestone.status}` });
+-    }
+-
+-    milestone.status = 'funded';
+-    milestone.fundedAt = new Date();
+-    await contract.save();
+-
+-    res.json({ success: true, message: 'Milestone funded into Escrow', contract });
+-  } catch (error) {
+-    res.status(500).json({ success: false, message: error.message });
+-  }
+-});
++// NOTE: The old POST /:id/milestones/:milestoneId/fund endpoint has been removed.
++// It used to mark a milestone 'funded' directly with no payment check, which meant
++// a client could fund escrow without ever paying. Real funding now goes through
++// POST /api/payments/contracts/:id/milestones/:milestoneId/checkout (Stripe Checkout),
++// confirmed via webhook or GET /api/payments/verify-session.
+ 
+ // POST /api/contracts/:id/milestones/:milestoneId/submit - Freelancer submits work for milestone
+ router.post('/:id/milestones/:milestoneId/submit', protect, async (req, res) => {
+@@ -96,6 +80,13 @@ router.post('/:id/milestones/:milestoneId/submit', protect, async (req, res) =>
+     milestone.submissionNotes = submissionNotes || 'Work delivered for client review';
+     await contract.save();
+ 
++    await createNotification(
++      contract.client,
++      'milestone_submitted',
++      `Work submitted for milestone "${milestone.title}" — review and release when ready.`,
++      '/dashboard?tab=contracts'
++    );
++
+     res.json({ success: true, message: 'Work submitted for review', contract });
+   } catch (error) {
+     res.status(500).json({ success: false, message: error.message });
+@@ -119,8 +110,25 @@ router.post('/:id/milestones/:milestoneId/release', protect, async (req, res) =>
+       return res.status(400).json({ success: false, message: 'Milestone cannot be released in current state' });
+     }
+ 
++    const freelancer = await User.findById(contract.freelancer);
++    if (!freelancer?.stripeAccountId || !freelancer.stripeOnboardingComplete) {
++      return res.status(400).json({ success: false, message: 'Freelancer has not finished setting up payouts yet.' });
++    }
++
++    const platformFee = Math.round(milestone.amount * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
++    const netAmount = Math.round((milestone.amount - platformFee) * 100) / 100;
++
++    const transfer = await stripe.transfers.create({
++      amount: Math.round(netAmount * 100),
++      currency: 'usd',
++      destination: freelancer.stripeAccountId,
++      transfer_group: `contract_${contract._id}`
++    });
++
+     milestone.status = 'released';
+     milestone.releasedAt = new Date();
++    milestone.platformFee = platformFee;
++    milestone.stripeTransferId = transfer.id;
+ 
+     // Check if all milestones released
+     const allReleased = contract.milestones.every(m => m.status === 'released');
+@@ -130,10 +138,52 @@ router.post('/:id/milestones/:milestoneId/release', protect, async (req, res) =>
+ 
+     await contract.save();
+ 
++    await createNotification(
++      contract.freelancer,
++      'milestone_released',
++      `Payment of $${netAmount} released for milestone "${milestone.title}".`,
++      '/dashboard?tab=contracts'
++    );
++
+     res.json({ success: true, message: 'Payment released to freelancer', contract });
+   } catch (error) {
+     res.status(500).json({ success: false, message: error.message });
+   }
+ });
+ 
++// POST /api/contracts/:id/dispute — either party flags a contract for admin review
++router.post('/:id/dispute', protect, async (req, res) => {
++  try {
++    const { reason } = req.body;
++    const contract = await Contract.findById(req.params.id);
++    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found' });
++
++    const userId = req.user._id.toString();
++    if (contract.client.toString() !== userId && contract.freelancer.toString() !== userId) {
++      return res.status(403).json({ success: false, message: 'You are not part of this contract' });
++    }
++    if (contract.status === 'completed' || contract.status === 'cancelled') {
++      return res.status(400).json({ success: false, message: `Cannot dispute a ${contract.status} contract.` });
++    }
++
++    contract.status = 'disputed';
++    contract.disputeReason = reason || 'No reason provided';
++    contract.disputeRaisedBy = req.user._id;
++    await contract.save();
++
++    // Notify the other party
++    const otherParty = contract.client.toString() === userId ? contract.freelancer : contract.client;
++    await createNotification(
++      otherParty,
++      'contract_disputed',
++      `A dispute was raised on contract "${contract.title}". Our team will review it.`,
++      '/dashboard?tab=contracts'
++    );
++
++    res.json({ success: true, message: 'Dispute raised. Our team will review this contract.', contract });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
+ export default router;
+diff --git a/server/routes/notificationRoutes.js b/server/routes/notificationRoutes.js
+new file mode 100644
+index 0000000..e92b730
+--- /dev/null
++++ b/server/routes/notificationRoutes.js
+@@ -0,0 +1,54 @@
++import express from 'express';
++import Notification from '../models/Notification.js';
++import { protect } from '../middleware/authMiddleware.js';
++
++const router = express.Router();
++
++// Shared helper — other route files import this to create a notification
++// as a side effect of some action (proposal accepted, milestone funded, etc).
++export async function createNotification(userId, type, message, link = null) {
++  try {
++    await Notification.create({ user: userId, type, message, link });
++  } catch (err) {
++    // Notifications are best-effort — never let a notification failure break the main action.
++    console.error('Failed to create notification:', err.message);
++  }
++}
++
++// GET /api/notifications — most recent first, for the logged-in user
++router.get('/', protect, async (req, res) => {
++  try {
++    const notifications = await Notification.find({ user: req.user._id })
++      .sort({ createdAt: -1 })
++      .limit(50);
++    const unreadCount = await Notification.countDocuments({ user: req.user._id, read: false });
++    res.json({ success: true, notifications, unreadCount });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// PATCH /api/notifications/:id/read
++router.patch('/:id/read', protect, async (req, res) => {
++  try {
++    const notification = await Notification.findOne({ _id: req.params.id, user: req.user._id });
++    if (!notification) return res.status(404).json({ success: false, message: 'Notification not found.' });
++    notification.read = true;
++    await notification.save();
++    res.json({ success: true, notification });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// PATCH /api/notifications/read-all
++router.patch('/read-all', protect, async (req, res) => {
++  try {
++    await Notification.updateMany({ user: req.user._id, read: false }, { read: true });
++    res.json({ success: true });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++export default router;
+diff --git a/server/routes/paymentRoutes.js b/server/routes/paymentRoutes.js
+new file mode 100644
+index 0000000..a6079f0
+--- /dev/null
++++ b/server/routes/paymentRoutes.js
+@@ -0,0 +1,189 @@
++import express from 'express';
++import stripe from '../config/stripe.js';
++import User from '../models/User.js';
++import Contract from '../models/Contract.js';
++import { protect, requireRole } from '../middleware/authMiddleware.js';
++import { createNotification } from './notificationRoutes.js';
++
++const router = express.Router();
++
++function getFrontendUrl(req) {
++  return process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
++}
++
++// ---- Stripe Connect onboarding (freelancer payouts) ----
++
++// POST /api/payments/connect/onboarding — creates (or reuses) an Express account
++// for the freelancer and returns a Stripe-hosted onboarding link.
++router.post('/connect/onboarding', protect, requireRole('freelancer'), async (req, res) => {
++  try {
++    const user = await User.findById(req.user._id);
++    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
++
++    if (!user.stripeAccountId) {
++      const account = await stripe.accounts.create({
++        type: 'express',
++        email: user.email,
++        capabilities: { transfers: { requested: true } }
++      });
++      user.stripeAccountId = account.id;
++      await user.save();
++    }
++
++    const frontendUrl = getFrontendUrl(req);
++    const accountLink = await stripe.accountLinks.create({
++      account: user.stripeAccountId,
++      refresh_url: `${frontendUrl}/?stripe=refresh`,
++      return_url: `${frontendUrl}/?stripe=onboarded`,
++      type: 'account_onboarding'
++    });
++
++    res.json({ success: true, url: accountLink.url });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// GET /api/payments/connect/status — checks whether the freelancer can actually receive payouts yet.
++router.get('/connect/status', protect, requireRole('freelancer'), async (req, res) => {
++  try {
++    const user = await User.findById(req.user._id);
++    if (!user?.stripeAccountId) {
++      return res.json({ success: true, onboardingComplete: false, chargesEnabled: false });
++    }
++
++    const account = await stripe.accounts.retrieve(user.stripeAccountId);
++    const onboardingComplete = Boolean(account.details_submitted && account.charges_enabled);
++
++    if (onboardingComplete !== user.stripeOnboardingComplete) {
++      user.stripeOnboardingComplete = onboardingComplete;
++      await user.save();
++    }
++
++    res.json({
++      success: true,
++      onboardingComplete,
++      chargesEnabled: account.charges_enabled,
++      detailsSubmitted: account.details_submitted
++    });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// ---- Milestone funding (client pays into escrow) ----
++
++// POST /api/payments/contracts/:contractId/milestones/:milestoneId/checkout
++// Replaces the old "instant fund" stub: this actually charges the client via Stripe
++// Checkout. Funds land on the PLATFORM's Stripe balance and stay there — the
++// milestone is only marked 'funded' once payment is confirmed (via webhook, or the
++// verify-session fallback below), never on this call itself.
++router.post('/contracts/:contractId/milestones/:milestoneId/checkout', protect, requireRole('client'), async (req, res) => {
++  try {
++    const contract = await Contract.findById(req.params.contractId);
++    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found.' });
++    if (contract.client.toString() !== req.user._id.toString()) {
++      return res.status(403).json({ success: false, message: 'You do not own this contract.' });
++    }
++
++    const milestone = contract.milestones.id(req.params.milestoneId);
++    if (!milestone) return res.status(404).json({ success: false, message: 'Milestone not found.' });
++    if (milestone.status !== 'pending') {
++      return res.status(400).json({ success: false, message: `Milestone is already ${milestone.status}.` });
++    }
++
++    const frontendUrl = getFrontendUrl(req);
++    const session = await stripe.checkout.sessions.create({
++      mode: 'payment',
++      payment_method_types: ['card'],
++      line_items: [{
++        price_data: {
++          currency: 'usd',
++          product_data: { name: `Milestone: ${milestone.title}` },
++          unit_amount: Math.round(milestone.amount * 100)
++        },
++        quantity: 1
++      }],
++      metadata: {
++        contractId: contract._id.toString(),
++        milestoneId: milestone._id.toString()
++      },
++      success_url: `${frontendUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
++      cancel_url: `${frontendUrl}/?payment=cancelled`
++    });
++
++    milestone.stripeCheckoutSessionId = session.id;
++    await contract.save();
++
++    res.json({ success: true, url: session.url });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// GET /api/payments/verify-session?session_id=... — fallback confirmation for local dev
++// where Stripe webhooks can't reach localhost. The webhook below is authoritative in
++// production; this lets the UI reflect a successful payment immediately on return.
++router.get('/verify-session', protect, async (req, res) => {
++  try {
++    const { session_id } = req.query;
++    if (!session_id) return res.status(400).json({ success: false, message: 'session_id is required.' });
++
++    const session = await stripe.checkout.sessions.retrieve(session_id);
++    if (session.payment_status !== 'paid') {
++      return res.json({ success: true, funded: false });
++    }
++
++    const funded = await markMilestoneFunded(session.metadata.contractId, session.metadata.milestoneId, session.payment_intent);
++    res.json({ success: true, funded });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++async function markMilestoneFunded(contractId, milestoneId, paymentIntentId) {
++  const contract = await Contract.findById(contractId);
++  if (!contract) return false;
++  const milestone = contract.milestones.id(milestoneId);
++  if (!milestone || milestone.status !== 'pending') return false;
++
++  milestone.status = 'funded';
++  milestone.stripePaymentIntentId = paymentIntentId;
++  milestone.fundedAt = new Date();
++  await contract.save();
++
++  await createNotification(
++    contract.freelancer,
++    'milestone_funded',
++    `Milestone "${milestone.title}" has been funded — you can start work.`,
++    '/dashboard?tab=contracts'
++  );
++
++  return true;
++}
++
++// ---- Webhook (authoritative funding confirmation) ----
++// Mounted with express.raw() in server/index.js BEFORE the global express.json()
++// middleware — Stripe signature verification needs the raw, unparsed body.
++export async function handleStripeWebhook(req, res) {
++  const sig = req.headers['stripe-signature'];
++  let event;
++
++  try {
++    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
++  } catch (err) {
++    console.error('⚠️  Stripe webhook signature verification failed:', err.message);
++    return res.status(400).send(`Webhook Error: ${err.message}`);
++  }
++
++  if (event.type === 'checkout.session.completed') {
++    const session = event.data.object;
++    if (session.payment_status === 'paid' && session.metadata?.contractId && session.metadata?.milestoneId) {
++      await markMilestoneFunded(session.metadata.contractId, session.metadata.milestoneId, session.payment_intent);
++    }
++  }
++
++  res.json({ received: true });
++}
++
++export default router;
+diff --git a/server/routes/proposalRoutes.js b/server/routes/proposalRoutes.js
+index 478a281..c95333d 100644
+--- a/server/routes/proposalRoutes.js
++++ b/server/routes/proposalRoutes.js
+@@ -3,6 +3,7 @@ import Proposal from '../models/Proposal.js';
+ import Project from '../models/Project.js';
+ import Contract from '../models/Contract.js';
+ import { protect, requireRole } from '../middleware/authMiddleware.js';
++import { createNotification } from './notificationRoutes.js';
+ 
+ const router = express.Router();
+ 
+@@ -60,6 +61,13 @@ router.post('/', protect, requireRole('freelancer'), async (req, res) => {
+       .populate('project', 'title category budget status')
+       .populate('freelancer', 'name email avatar title rating');
+ 
++    await createNotification(
++      project.client,
++      'proposal_received',
++      `${populated.freelancer.name} submitted a proposal on "${project.title}"`,
++      '/dashboard?tab=posted-jobs'
++    );
++
+     res.status(201).json({ success: true, proposal: populated });
+   } catch (error) {
+     res.status(500).json({ success: false, message: error.message });
+@@ -100,6 +108,14 @@ router.post('/:id/accept', protect, requireRole('client'), async (req, res) => {
+       }]
+     });
+ 
++    // Notify freelancer
++    await createNotification(
++      proposal.freelancer,
++      'proposal_accepted',
++      `Your proposal on "${proposal.project.title}" was accepted! A contract has been created.`,
++      '/dashboard?tab=contracts'
++    );
++
+     res.json({ success: true, message: 'Proposal accepted and contract initialized', proposal, contract });
+   } catch (error) {
+     res.status(500).json({ success: false, message: error.message });
+diff --git a/server/routes/reviewRoutes.js b/server/routes/reviewRoutes.js
+new file mode 100644
+index 0000000..9daa2a9
+--- /dev/null
++++ b/server/routes/reviewRoutes.js
+@@ -0,0 +1,87 @@
++import express from 'express';
++import Review from '../models/Review.js';
++import Contract from '../models/Contract.js';
++import User from '../models/User.js';
++import { protect } from '../middleware/authMiddleware.js';
++
++const router = express.Router();
++
++async function recalculateRating(userId) {
++  const reviews = await Review.find({ reviewee: userId });
++  if (reviews.length === 0) return;
++  const avg = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
++  await User.findByIdAndUpdate(userId, {
++    rating: Math.round(avg * 10) / 10,
++    reviewsCount: reviews.length
++  });
++}
++
++// POST /api/reviews — leave a review for the other party on a completed contract
++router.post('/', protect, async (req, res) => {
++  try {
++    const { contractId, rating, comment } = req.body;
++    if (!contractId || !rating) {
++      return res.status(400).json({ success: false, message: 'contractId and rating are required.' });
++    }
++    if (rating < 1 || rating > 5) {
++      return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5.' });
++    }
++
++    const contract = await Contract.findById(contractId);
++    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found.' });
++
++    const userId = req.user._id.toString();
++    const isClient = contract.client.toString() === userId;
++    const isFreelancer = contract.freelancer.toString() === userId;
++    if (!isClient && !isFreelancer) {
++      return res.status(403).json({ success: false, message: 'You are not part of this contract.' });
++    }
++    if (contract.status !== 'completed') {
++      return res.status(400).json({ success: false, message: 'You can only review a completed contract.' });
++    }
++
++    const revieweeId = isClient ? contract.freelancer : contract.client;
++
++    const review = await Review.create({
++      contract: contract._id,
++      project: contract.project,
++      reviewer: userId,
++      reviewee: revieweeId,
++      rating,
++      comment
++    });
++
++    await recalculateRating(revieweeId);
++
++    res.status(201).json({ success: true, review });
++  } catch (error) {
++    if (error.code === 11000) {
++      return res.status(400).json({ success: false, message: 'You already reviewed this contract.' });
++    }
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// GET /api/reviews/user/:userId — public list of reviews received by a user
++router.get('/user/:userId', async (req, res) => {
++  try {
++    const reviews = await Review.find({ reviewee: req.params.userId })
++      .populate('reviewer', 'name avatar')
++      .sort({ createdAt: -1 });
++    res.json({ success: true, reviews });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++// GET /api/reviews/contract/:contractId — check whether the current user already reviewed this contract
++router.get('/contract/:contractId', protect, async (req, res) => {
++  try {
++    const existing = await Review.findOne({ contract: req.params.contractId, reviewer: req.user._id });
++    res.json({ success: true, alreadyReviewed: Boolean(existing) });
++  } catch (error) {
++    res.status(500).json({ success: false, message: error.message });
++  }
++});
++
++export default router;
+diff --git a/server/routes/uploadRoutes.js b/server/routes/uploadRoutes.js
+new file mode 100644
+index 0000000..c34b030
+--- /dev/null
++++ b/server/routes/uploadRoutes.js
+@@ -0,0 +1,62 @@
++import express from 'express';
++import multer from 'multer';
++import path from 'path';
++import fs from 'fs';
++import { fileURLToPath } from 'url';
++import User from '../models/User.js';
++import { protect } from '../middleware/authMiddleware.js';
++
++const __dirname = path.dirname(fileURLToPath(import.meta.url));
++const uploadDir = path.join(__dirname, '..', 'uploads');
++
++// Ensure the uploads directory exists (won't exist on a fresh clone/deploy)
++if (!fs.existsSync(uploadDir)) {
++  fs.mkdirSync(uploadDir, { recursive: true });
++}
++
++const storage = multer.diskStorage({
++  destination: (req, file, cb) => cb(null, uploadDir),
++  filename: (req, file, cb) => {
++    const ext = path.extname(file.originalname);
++    const safeName = `${req.user._id}-${Date.now()}${ext}`;
++    cb(null, safeName);
++  }
++});
++
++const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
++
++const upload = multer({
++  storage,
++  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
++  fileFilter: (req, file, cb) => {
++    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
++      return cb(new Error('Only JPEG, PNG, WEBP, and GIF images are allowed.'));
++    }
++    cb(null, true);
++  }
++});
++
++const router = express.Router();
++
++// POST /api/uploads/avatar — uploads a new avatar image and updates the user's profile
++router.post('/avatar', protect, (req, res) => {
++  upload.single('avatar')(req, res, async (err) => {
++    if (err) {
++      return res.status(400).json({ success: false, message: err.message });
++    }
++    if (!req.file) {
++      return res.status(400).json({ success: false, message: 'No file uploaded.' });
++    }
++
++    try {
++      const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
++      const fileUrl = `${backendUrl}/uploads/${req.file.filename}`;
++      const user = await User.findByIdAndUpdate(req.user._id, { avatar: fileUrl }, { new: true });
++      res.json({ success: true, avatar: fileUrl, user });
++    } catch (error) {
++      res.status(500).json({ success: false, message: error.message });
++    }
++  });
++});
++
++export default router;
+diff --git a/server/uploads/.gitkeep b/server/uploads/.gitkeep
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/App.jsx b/src/App.jsx
+index 33eabfc..0a7de3d 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -21,6 +21,7 @@ import {
+   apiAcceptProposal,
+   apiFetchContracts,
+   apiFetchMe,
++  apiVerifyPaymentSession,
+   setAuthToken,
+   checkServerHealth 
+ } from './api/client';
+@@ -175,6 +176,34 @@ export default function App() {
+     setToast({ message, type });
+   };
+ 
++  // Handle returning from Stripe Checkout (?payment=success&session_id=...) or
++  // Stripe Connect onboarding (?stripe=onboarded / ?stripe=refresh)
++  useEffect(() => {
++    const params = new URLSearchParams(window.location.search);
++    const paymentStatus = params.get('payment');
++    const sessionId = params.get('session_id');
++    const stripeStatus = params.get('stripe');
++
++    if (paymentStatus === 'success' && sessionId) {
++      apiVerifyPaymentSession(sessionId).then((result) => {
++        if (result.funded) {
++          showToast('Milestone funded! Funds are held in escrow until you release them.', 'success');
++        } else {
++          showToast('Payment is processing — check back in a moment.', 'info');
++        }
++        loadContracts();
++      });
++    } else if (paymentStatus === 'cancelled') {
++      showToast('Payment was cancelled.', 'info');
++    } else if (stripeStatus === 'onboarded') {
++      showToast('Payout setup complete! You can now receive released funds.', 'success');
++    }
++
++    if (paymentStatus || stripeStatus) {
++      window.history.replaceState({}, '', window.location.pathname);
++    }
++  }, []);
++
+   // Toggle Bookmark Handler
+   const handleToggleSaveProject = (projectId) => {
+     setSavedProjectIds(prev => {
+@@ -261,6 +290,11 @@ export default function App() {
+     showToast('Logged out successfully', 'info');
+   };
+ 
++  const handleUpdateUser = (updatedUser) => {
++    setCurrentUser(updatedUser);
++    showToast('Profile updated', 'success');
++  };
++
+   const handleDeleteAccount = () => {
+     setCurrentUser(null);
+     setAuthToken(null);
+@@ -285,6 +319,7 @@ export default function App() {
+         onOpenAuthModal={(mode) => setAuthModalConfig({ isOpen: true, mode })}
+         onLogout={handleLogout}
+         onDeleteAccount={handleDeleteAccount}
++        onUpdateUser={handleUpdateUser}
+       />
+ 
+       {/* Main Content Area */}
+diff --git a/src/api/client.js b/src/api/client.js
+index e28822e..21349c2 100644
+--- a/src/api/client.js
++++ b/src/api/client.js
+@@ -1,8 +1,14 @@
+ // WorkPulse Resilient API Client with JWT Auth & Automatic Fallbacks
+ 
+-const API_BASE_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+-  ? 'http://localhost:5000/api'
+-  : '/api';
++// In production, the frontend (e.g. Vercel) and backend (e.g. Render) usually
++// live on different domains, so a relative '/api' path would wrongly hit the
++// frontend's own domain. Set VITE_API_URL in your deployment platform's env
++// vars to the deployed backend's URL (e.g. https://workpulse-backend.onrender.com/api).
++const API_BASE_URL = import.meta.env.VITE_API_URL
++  ? import.meta.env.VITE_API_URL
++  : (typeof window !== 'undefined' && window.location.hostname === 'localhost'
++    ? 'http://localhost:5000/api'
++    : '/api');
+ 
+ export const getAuthToken = () => {
+   if (typeof window !== 'undefined') {
+@@ -207,15 +213,43 @@ export const apiFetchContracts = async () => {
+   return [];
+ };
+ 
++// Starts a Stripe Checkout session for a milestone. Returns { url } — the caller
++// must redirect the browser there; funding is only confirmed once Stripe redirects
++// back and verify-session (or the webhook) marks it funded.
+ export const apiFundMilestone = async (contractId, milestoneId) => {
+-  const result = await safeFetchJson(`${API_BASE_URL}/contracts/${contractId}/milestones/${milestoneId}/fund`, {
++  const result = await safeFetchJson(`${API_BASE_URL}/payments/contracts/${contractId}/milestones/${milestoneId}/checkout`, {
+     method: 'POST',
+     headers: getHeaders()
+   });
+-  if (result.ok && result.data && result.data.contract) {
+-    return result.data.contract;
++  if (result.ok && result.data && result.data.url) {
++    return { url: result.data.url };
+   }
+-  throw new Error('Funding milestone failed');
++  throw new Error(result.data?.message || 'Starting checkout failed');
++};
++
++export const apiVerifyPaymentSession = async (sessionId) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/payments/verify-session?session_id=${encodeURIComponent(sessionId)}`, {
++    headers: getHeaders(false)
++  });
++  return result.ok ? result.data : { success: false, funded: false };
++};
++
++export const apiStartPayoutOnboarding = async () => {
++  const result = await safeFetchJson(`${API_BASE_URL}/payments/connect/onboarding`, {
++    method: 'POST',
++    headers: getHeaders()
++  });
++  if (result.ok && result.data && result.data.url) {
++    return { url: result.data.url };
++  }
++  throw new Error(result.data?.message || 'Could not start payout setup');
++};
++
++export const apiGetPayoutStatus = async () => {
++  const result = await safeFetchJson(`${API_BASE_URL}/payments/connect/status`, {
++    headers: getHeaders(false)
++  });
++  return result.ok ? result.data : { onboardingComplete: false };
+ };
+ 
+ export const apiSubmitMilestone = async (contractId, milestoneId, submissionNotes) => {
+@@ -267,3 +301,95 @@ export const apiSendMessage = async (contractId, content) => {
+     createdAt: new Date().toISOString()
+   };
+ };
++
++// ---- Notifications ----
++
++export const apiFetchNotifications = async () => {
++  const result = await safeFetchJson(`${API_BASE_URL}/notifications`, { headers: getHeaders(false) });
++  return result.ok ? result.data : { notifications: [], unreadCount: 0 };
++};
++
++export const apiMarkNotificationRead = async (id) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/notifications/${id}/read`, {
++    method: 'PATCH',
++    headers: getHeaders(false)
++  });
++  return result.ok;
++};
++
++export const apiMarkAllNotificationsRead = async () => {
++  const result = await safeFetchJson(`${API_BASE_URL}/notifications/read-all`, {
++    method: 'PATCH',
++    headers: getHeaders(false)
++  });
++  return result.ok;
++};
++
++// ---- Avatar upload ----
++
++export const apiUploadAvatar = async (file) => {
++  const formData = new FormData();
++  formData.append('avatar', file);
++  const token = getAuthToken();
++  const result = await safeFetchJson(`${API_BASE_URL}/uploads/avatar`, {
++    method: 'POST',
++    headers: token ? { Authorization: `Bearer ${token}` } : {}, // no Content-Type — browser sets multipart boundary
++    body: formData
++  });
++  if (result.ok && result.data) return result.data;
++  throw new Error(result.data?.message || 'Upload failed');
++};
++
++// ---- Reviews ----
++
++export const apiSubmitReview = async (contractId, rating, comment) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/reviews`, {
++    method: 'POST',
++    headers: getHeaders(),
++    body: JSON.stringify({ contractId, rating, comment })
++  });
++  if (result.ok && result.data) return result.data;
++  throw new Error(result.data?.message || 'Could not submit review');
++};
++
++export const apiFetchUserReviews = async (userId) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/reviews/user/${userId}`, { headers: getHeaders(false) });
++  return result.ok ? (result.data.reviews || []) : [];
++};
++
++export const apiCheckAlreadyReviewed = async (contractId) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/reviews/contract/${contractId}`, { headers: getHeaders(false) });
++  return result.ok ? result.data.alreadyReviewed : false;
++};
++
++// ---- Password reset ----
++
++export const apiForgotPassword = async (email) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/auth/forgot-password`, {
++    method: 'POST',
++    headers: getHeaders(),
++    body: JSON.stringify({ email })
++  });
++  return result.ok ? result.data : { success: false, message: result.data?.message || 'Something went wrong.' };
++};
++
++export const apiResetPassword = async (token, password) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/auth/reset-password`, {
++    method: 'POST',
++    headers: getHeaders(),
++    body: JSON.stringify({ token, password })
++  });
++  return result.ok ? result.data : { success: false, message: result.data?.message || 'Reset failed.' };
++};
++
++// ---- Contract dispute ----
++
++export const apiRaiseDispute = async (contractId, reason) => {
++  const result = await safeFetchJson(`${API_BASE_URL}/contracts/${contractId}/dispute`, {
++    method: 'POST',
++    headers: getHeaders(),
++    body: JSON.stringify({ reason })
++  });
++  if (result.ok && result.data) return result.data;
++  throw new Error(result.data?.message || 'Could not raise dispute');
++};
+diff --git a/src/components/ContractsPanel.jsx b/src/components/ContractsPanel.jsx
+index ed1ce4b..34636f7 100644
+--- a/src/components/ContractsPanel.jsx
++++ b/src/components/ContractsPanel.jsx
+@@ -1,22 +1,59 @@
+-import React, { useState } from 'react';
+-import { DollarSign, Shield, CheckCircle2, Clock, Send, FileText, ChevronRight } from 'lucide-react';
+-import { apiFundMilestone, apiSubmitMilestone, apiReleaseMilestone } from '../api/client';
++import React, { useState, useEffect } from 'react';
++import { DollarSign, Shield, CheckCircle2, Clock, Send, FileText, ChevronRight, ExternalLink } from 'lucide-react';
++import { apiFundMilestone, apiSubmitMilestone, apiReleaseMilestone, apiGetPayoutStatus, apiStartPayoutOnboarding } from '../api/client';
+ 
+ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOpenChat }) {
+   const [loadingId, setLoadingId] = useState(null);
+   const [submitNotes, setSubmitNotes] = useState({});
+   const [errorMsg, setErrorMsg] = useState('');
++  const [payoutStatus, setPayoutStatus] = useState(null);
++
++  useEffect(() => {
++    if (currentUser?.role === 'freelancer') {
++      apiGetPayoutStatus().then(setPayoutStatus);
++    }
++  }, [currentUser]);
++
++  const handleSetupPayouts = async () => {
++    try {
++      const { url } = await apiStartPayoutOnboarding();
++      window.location.href = url;
++    } catch (err) {
++      setErrorMsg(err.message || 'Could not start payout setup');
++    }
++  };
++
++  const payoutBanner = currentUser?.role === 'freelancer' && payoutStatus && !payoutStatus.onboardingComplete && (
++    <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
++      <div className="flex items-center gap-3">
++        <Shield className="w-6 h-6 text-amber-600 flex-shrink-0" />
++        <div>
++          <div className="font-semibold text-slate-800">Set up payouts to get paid</div>
++          <div className="text-sm text-slate-500">Connect a Stripe account (test mode) before you can receive released milestone funds.</div>
++        </div>
++      </div>
++      <button
++        onClick={handleSetupPayouts}
++        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm rounded-xl transition shadow flex items-center gap-2 flex-shrink-0"
++      >
++        <ExternalLink className="w-4 h-4" /> Set Up Payouts
++      </button>
++    </div>
++  );
+ 
+   if (!contracts || contracts.length === 0) {
+     return (
+-      <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm">
+-        <Shield className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+-        <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Contracts</h3>
+-        <p className="text-slate-500 max-w-md mx-auto">
+-          {currentUser?.role === 'client' 
+-            ? 'Accept a proposal on one of your posted projects to initiate a funded contract with a freelancer.'
+-            : 'Once a client accepts your proposal, active milestone contracts will appear here.'}
+-        </p>
++      <div className="space-y-6">
++        {payoutBanner}
++        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm">
++          <Shield className="w-16 h-16 text-slate-300 mx-auto mb-4" />
++          <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Contracts</h3>
++          <p className="text-slate-500 max-w-md mx-auto">
++            {currentUser?.role === 'client' 
++              ? 'Accept a proposal on one of your posted projects to initiate a funded contract with a freelancer.'
++              : 'Once a client accepts your proposal, active milestone contracts will appear here.'}
++          </p>
++        </div>
+       </div>
+     );
+   }
+@@ -25,11 +62,10 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
+     try {
+       setLoadingId(milestoneId);
+       setErrorMsg('');
+-      await apiFundMilestone(contractId, milestoneId);
+-      onRefresh();
++      const { url } = await apiFundMilestone(contractId, milestoneId);
++      window.location.href = url; // redirect to Stripe-hosted Checkout; funding is confirmed on return
+     } catch (err) {
+       setErrorMsg(err.message || 'Funding failed');
+-    } finally {
+       setLoadingId(null);
+     }
+   };
+@@ -76,6 +112,8 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
+ 
+   return (
+     <div className="space-y-6">
++      {payoutBanner}
++
+       {errorMsg && (
+         <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm font-medium">
+           {errorMsg}
+diff --git a/src/components/Header.jsx b/src/components/Header.jsx
+index 9fdba8b..412cfd4 100644
+--- a/src/components/Header.jsx
++++ b/src/components/Header.jsx
+@@ -1,5 +1,6 @@
+-import React, { useState } from 'react';
+-import { Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Trash2, Menu, X } from 'lucide-react';
++import React, { useState, useEffect, useRef } from 'react';
++import { Search, UserCheck, PlusCircle, LayoutDashboard, Bookmark, LogIn, UserPlus, LogOut, ChevronDown, Trash2, Menu, X, Bell, Camera } from 'lucide-react';
++import { apiFetchNotifications, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiUploadAvatar } from '../api/client';
+ 
+ export default function Header({ 
+   activeTab, 
+@@ -12,10 +13,64 @@ export default function Header({
+   currentUser,
+   onOpenAuthModal,
+   onLogout,
+-  onDeleteAccount
++  onDeleteAccount,
++  onUpdateUser
+ }) {
+   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
++  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
++  const [notifications, setNotifications] = useState([]);
++  const [unreadCount, setUnreadCount] = useState(0);
++  const [uploadingAvatar, setUploadingAvatar] = useState(false);
++  const avatarInputRef = useRef(null);
++
++  useEffect(() => {
++    if (!currentUser || !currentUser.loggedIn) return;
++    const loadNotifications = () => {
++      apiFetchNotifications().then((data) => {
++        setNotifications(data.notifications || []);
++        setUnreadCount(data.unreadCount || 0);
++      });
++    };
++    loadNotifications();
++    const interval = setInterval(loadNotifications, 30000); // poll every 30s
++    return () => clearInterval(interval);
++  }, [currentUser]);
++
++  const handleNotifClick = async (notif) => {
++    if (!notif.read) {
++      await apiMarkNotificationRead(notif._id);
++      setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
++      setUnreadCount(prev => Math.max(0, prev - 1));
++    }
++    if (notif.link) {
++      setActiveTab('dashboard');
++    }
++    setNotifDropdownOpen(false);
++  };
++
++  const handleMarkAllRead = async () => {
++    await apiMarkAllNotificationsRead();
++    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
++    setUnreadCount(0);
++  };
++
++  const handleAvatarFileSelected = async (e) => {
++    const file = e.target.files[0];
++    if (!file) return;
++    setUploadingAvatar(true);
++    try {
++      const result = await apiUploadAvatar(file);
++      if (result.avatar && onUpdateUser) {
++        onUpdateUser({ ...currentUser, avatar: result.avatar });
++      }
++    } catch (err) {
++      alert(err.message || 'Avatar upload failed');
++    } finally {
++      setUploadingAvatar(false);
++      e.target.value = '';
++    }
++  };
+ 
+   const handleDeleteAccountClick = () => {
+     if (window.confirm('⚠️ Are you sure you want to permanently delete your account? This action cannot be undone.')) {
+@@ -214,7 +269,71 @@ export default function Header({
+             )}
+           </div>
+ 
+-          {/* User Auth Section */}
++          {/* Notification Bell */}
++          {currentUser && currentUser.loggedIn && (
++            <div style={{ position: 'relative' }}>
++              <div
++                onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
++                style={{ position: 'relative', cursor: 'pointer', padding: '0.5rem' }}
++              >
++                <Bell size={20} />
++                {unreadCount > 0 && (
++                  <span style={{
++                    position: 'absolute', top: '0', right: '0',
++                    backgroundColor: 'var(--accent-rose, #f43f5e)', color: '#FFF',
++                    fontSize: '0.65rem', fontWeight: 700, width: '16px', height: '16px',
++                    borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center'
++                  }}>
++                    {unreadCount > 9 ? '9+' : unreadCount}
++                  </span>
++                )}
++              </div>
++
++              {notifDropdownOpen && (
++                <div style={{
++                  position: 'absolute', top: '110%', right: 0, width: '320px', maxHeight: '400px', overflowY: 'auto',
++                  background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
++                  borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', zIndex: 1000
++                }}>
++                  <div style={{
++                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
++                    padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-subtle)'
++                  }}>
++                    <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Notifications</span>
++                    {unreadCount > 0 && (
++                      <button onClick={handleMarkAllRead} style={{
++                        background: 'none', border: 'none', color: 'var(--primary)',
++                        fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600
++                      }}>
++                        Mark all read
++                      </button>
++                    )}
++                  </div>
++                  {notifications.length === 0 ? (
++                    <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
++                      No notifications yet
++                    </div>
++                  ) : (
++                    notifications.map((n) => (
++                      <div
++                        key={n._id}
++                        onClick={() => handleNotifClick(n)}
++                        style={{
++                          padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-subtle)',
++                          cursor: 'pointer', background: n.read ? 'transparent' : 'var(--bg-input)'
++                        }}
++                      >
++                        <div style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{n.message}</div>
++                        <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.2rem' }}>
++                          {new Date(n.createdAt).toLocaleString()}
++                        </div>
++                      </div>
++                    ))
++                  )}
++                </div>
++              )}
++            </div>
++          )}
+           {currentUser && currentUser.loggedIn ? (
+             <div style={{ position: 'relative' }}>
+               <div 
+@@ -274,6 +393,22 @@ export default function Header({
+                     <LayoutDashboard size={14} /> My Dashboard
+                   </button>
+ 
++                  <button
++                    onClick={() => avatarInputRef.current?.click()}
++                    disabled={uploadingAvatar}
++                    className="btn btn-secondary btn-sm"
++                    style={{ justifyContent: 'flex-start' }}
++                  >
++                    <Camera size={14} /> {uploadingAvatar ? 'Uploading…' : 'Change Photo'}
++                  </button>
++                  <input
++                    ref={avatarInputRef}
++                    type="file"
++                    accept="image/jpeg,image/png,image/webp,image/gif"
++                    onChange={handleAvatarFileSelected}
++                    style={{ display: 'none' }}
++                  />
++
+                   <button 
+                     onClick={() => { onLogout(); setProfileDropdownOpen(false); }}
+                     className="btn btn-secondary btn-sm"

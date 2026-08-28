@@ -1,22 +1,59 @@
-import React, { useState } from 'react';
-import { DollarSign, Shield, CheckCircle2, Clock, Send, FileText, ChevronRight } from 'lucide-react';
-import { apiFundMilestone, apiSubmitMilestone, apiReleaseMilestone } from '../api/client';
+import React, { useState, useEffect } from 'react';
+import { DollarSign, Shield, CheckCircle2, Clock, Send, FileText, ChevronRight, ExternalLink } from 'lucide-react';
+import { apiFundMilestone, apiSubmitMilestone, apiReleaseMilestone, apiGetPayoutStatus, apiStartPayoutOnboarding } from '../api/client';
 
 export default function ContractsPanel({ contracts, currentUser, onRefresh, onOpenChat }) {
   const [loadingId, setLoadingId] = useState(null);
   const [submitNotes, setSubmitNotes] = useState({});
   const [errorMsg, setErrorMsg] = useState('');
+  const [payoutStatus, setPayoutStatus] = useState(null);
+
+  useEffect(() => {
+    if (currentUser?.role === 'freelancer') {
+      apiGetPayoutStatus().then(setPayoutStatus);
+    }
+  }, [currentUser]);
+
+  const handleSetupPayouts = async () => {
+    try {
+      const { url } = await apiStartPayoutOnboarding();
+      window.location.href = url;
+    } catch (err) {
+      setErrorMsg(err.message || 'Could not start payout setup');
+    }
+  };
+
+  const payoutBanner = currentUser?.role === 'freelancer' && payoutStatus && !payoutStatus.onboardingComplete && (
+    <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex items-center gap-3">
+        <Shield className="w-6 h-6 text-amber-600 flex-shrink-0" />
+        <div>
+          <div className="font-semibold text-slate-800">Set up payouts to get paid</div>
+          <div className="text-sm text-slate-500">Connect a Stripe account (test mode) before you can receive released milestone funds.</div>
+        </div>
+      </div>
+      <button
+        onClick={handleSetupPayouts}
+        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm rounded-xl transition shadow flex items-center gap-2 flex-shrink-0"
+      >
+        <ExternalLink className="w-4 h-4" /> Set Up Payouts
+      </button>
+    </div>
+  );
 
   if (!contracts || contracts.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm">
-        <Shield className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-        <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Contracts</h3>
-        <p className="text-slate-500 max-w-md mx-auto">
-          {currentUser?.role === 'client' 
-            ? 'Accept a proposal on one of your posted projects to initiate a funded contract with a freelancer.'
-            : 'Once a client accepts your proposal, active milestone contracts will appear here.'}
-        </p>
+      <div className="space-y-6">
+        {payoutBanner}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm">
+          <Shield className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Contracts</h3>
+          <p className="text-slate-500 max-w-md mx-auto">
+            {currentUser?.role === 'client' 
+              ? 'Accept a proposal on one of your posted projects to initiate a funded contract with a freelancer.'
+              : 'Once a client accepts your proposal, active milestone contracts will appear here.'}
+          </p>
+        </div>
       </div>
     );
   }
@@ -25,11 +62,10 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
     try {
       setLoadingId(milestoneId);
       setErrorMsg('');
-      await apiFundMilestone(contractId, milestoneId);
-      onRefresh();
+      const { url } = await apiFundMilestone(contractId, milestoneId);
+      window.location.href = url; // redirect to Stripe-hosted Checkout; funding is confirmed on return
     } catch (err) {
       setErrorMsg(err.message || 'Funding failed');
-    } finally {
       setLoadingId(null);
     }
   };
@@ -76,6 +112,8 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
 
   return (
     <div className="space-y-6">
+      {payoutBanner}
+
       {errorMsg && (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm font-medium">
           {errorMsg}

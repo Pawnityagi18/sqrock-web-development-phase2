@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Environment variables (contains DB/JWT/Stripe secrets — never commit)
+.env
+.env.*
+!.env.example
+
+# User-uploaded files (avatars, etc.) — created at runtime, not committed
+server/uploads/*
+!server/uploads/.gitkeep
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

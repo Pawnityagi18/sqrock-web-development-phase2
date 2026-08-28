@@ -1,6 +1,11 @@
 import express from 'express';
 import Contract from '../models/Contract.js';
+import User from '../models/User.js';
+import stripe from '../config/stripe.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { createNotification } from './notificationRoutes.js';
+
+const PLATFORM_FEE_PERCENT = 10; // WorkPulse's cut on each released milestone
 
 const router = express.Router();
 
@@ -47,32 +52,11 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-// POST /api/contracts/:id/milestones/:milestoneId/fund - Client funds milestone (Escrow)
-router.post('/:id/milestones/:milestoneId/fund', protect, async (req, res) => {
-  try {
-    const contract = await Contract.findById(req.params.id);
-    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found' });
-
-    if (contract.client.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Only client can fund milestone' });
-    }
-
-    const milestone = contract.milestones.id(req.params.milestoneId);
-    if (!milestone) return res.status(404).json({ success: false, message: 'Milestone not found' });
-
-    if (milestone.status !== 'pending') {
-      return res.status(400).json({ success: false, message: `Milestone is already ${milestone.status}` });
-    }
-
-    milestone.status = 'funded';
-    milestone.fundedAt = new Date();
-    await contract.save();
-
-    res.json({ success: true, message: 'Milestone funded into Escrow', contract });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+// NOTE: The old POST /:id/milestones/:milestoneId/fund endpoint has been removed.
+// It used to mark a milestone 'funded' directly with no payment check, which meant
+// a client could fund escrow without ever paying. Real funding now goes through
+// POST /api/payments/contracts/:id/milestones/:milestoneId/checkout (Stripe Checkout),
+// confirmed via webhook or GET /api/payments/verify-session.
 
 // POST /api/contracts/:id/milestones/:milestoneId/submit - Freelancer submits work for milestone
 router.post('/:id/milestones/:milestoneId/submit', protect, async (req, res) => {
@@ -95,6 +79,13 @@ router.post('/:id/milestones/:milestoneId/submit', protect, async (req, res) => 
     milestone.status = 'submitted';
     milestone.submissionNotes = submissionNotes || 'Work delivered for client review';
     await contract.save();
+
+    await createNotification(
+      contract.client,
+      'milestone_submitted',
+      `Work submitted for milestone "${milestone.title}" — review and release when ready.`,
+      '/dashboard?tab=contracts'
+    );
 
     res.json({ success: true, message: 'Work submitted for review', contract });
   } catch (error) {
@@ -119,8 +110,25 @@ router.post('/:id/milestones/:milestoneId/release', protect, async (req, res) =>
       return res.status(400).json({ success: false, message: 'Milestone cannot be released in current state' });
     }
 
+    const freelancer = await User.findById(contract.freelancer);
+    if (!freelancer?.stripeAccountId || !freelancer.stripeOnboardingComplete) {
+      return res.status(400).json({ success: false, message: 'Freelancer has not finished setting up payouts yet.' });
+    }
+
+    const platformFee = Math.round(milestone.amount * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
+    const netAmount = Math.round((milestone.amount - platformFee) * 100) / 100;
+
+    const transfer = await stripe.transfers.create({
+      amount: Math.round(netAmount * 100),
+      currency: 'usd',
+      destination: freelancer.stripeAccountId,
+      transfer_group: `contract_${contract._id}`
+    });
+
     milestone.status = 'released';
     milestone.releasedAt = new Date();
+    milestone.platformFee = platformFee;
+    milestone.stripeTransferId = transfer.id;
 
     // Check if all milestones released
     const allReleased = contract.milestones.every(m => m.status === 'released');
@@ -130,7 +138,49 @@ router.post('/:id/milestones/:milestoneId/release', protect, async (req, res) =>
 
     await contract.save();
 
+    await createNotification(
+      contract.freelancer,
+      'milestone_released',
+      `Payment of $${netAmount} released for milestone "${milestone.title}".`,
+      '/dashboard?tab=contracts'
+    );
+
     res.json({ success: true, message: 'Payment released to freelancer', contract });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/contracts/:id/dispute — either party flags a contract for admin review
+router.post('/:id/dispute', protect, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const contract = await Contract.findById(req.params.id);
+    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found' });
+
+    const userId = req.user._id.toString();
+    if (contract.client.toString() !== userId && contract.freelancer.toString() !== userId) {
+      return res.status(403).json({ success: false, message: 'You are not part of this contract' });
+    }
+    if (contract.status === 'completed' || contract.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: `Cannot dispute a ${contract.status} contract.` });
+    }
+
+    contract.status = 'disputed';
+    contract.disputeReason = reason || 'No reason provided';
+    contract.disputeRaisedBy = req.user._id;
+    await contract.save();
+
+    // Notify the other party
+    const otherParty = contract.client.toString() === userId ? contract.freelancer : contract.client;
+    await createNotification(
+      otherParty,
+      'contract_disputed',
+      `A dispute was raised on contract "${contract.title}". Our team will review it.`,
+      '/dashboard?tab=contracts'
+    );
+
+    res.json({ success: true, message: 'Dispute raised. Our team will review this contract.', contract });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

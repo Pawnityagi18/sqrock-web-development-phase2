@@ -21,6 +21,7 @@ import {
   apiAcceptProposal,
   apiFetchContracts,
   apiFetchMe,
+  apiVerifyPaymentSession,
   setAuthToken,
   checkServerHealth 
 } from './api/client';
@@ -175,6 +176,34 @@ export default function App() {
     setToast({ message, type });
   };
 
+  // Handle returning from Stripe Checkout (?payment=success&session_id=...) or
+  // Stripe Connect onboarding (?stripe=onboarded / ?stripe=refresh)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment');
+    const sessionId = params.get('session_id');
+    const stripeStatus = params.get('stripe');
+
+    if (paymentStatus === 'success' && sessionId) {
+      apiVerifyPaymentSession(sessionId).then((result) => {
+        if (result.funded) {
+          showToast('Milestone funded! Funds are held in escrow until you release them.', 'success');
+        } else {
+          showToast('Payment is processing — check back in a moment.', 'info');
+        }
+        loadContracts();
+      });
+    } else if (paymentStatus === 'cancelled') {
+      showToast('Payment was cancelled.', 'info');
+    } else if (stripeStatus === 'onboarded') {
+      showToast('Payout setup complete! You can now receive released funds.', 'success');
+    }
+
+    if (paymentStatus || stripeStatus) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   // Toggle Bookmark Handler
   const handleToggleSaveProject = (projectId) => {
     setSavedProjectIds(prev => {
@@ -261,6 +290,11 @@ export default function App() {
     showToast('Logged out successfully', 'info');
   };
 
+  const handleUpdateUser = (updatedUser) => {
+    setCurrentUser(updatedUser);
+    showToast('Profile updated', 'success');
+  };
+
   const handleDeleteAccount = () => {
     setCurrentUser(null);
     setAuthToken(null);
@@ -285,6 +319,7 @@ export default function App() {
         onOpenAuthModal={(mode) => setAuthModalConfig({ isOpen: true, mode })}
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
+        onUpdateUser={handleUpdateUser}
       />
 
       {/* Main Content Area */}
