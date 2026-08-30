@@ -1,0 +1,42 @@
+diff --git a/server/config/db.js b/server/config/db.js
+index e0149d3..7f8abc6 100644
+--- a/server/config/db.js
++++ b/server/config/db.js
+@@ -2,11 +2,17 @@ import mongoose from 'mongoose';
+ 
+ const connectDB = async () => {
+   try {
+-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/workpulse');
++    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/workpulse', {
++      serverSelectionTimeoutMS: 8000 // fail fast with a clear error instead of hanging for the ~30s default
++    });
+     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+   } catch (error) {
+     console.warn(`⚠️ MongoDB Connection Warning: ${error.message}`);
+-    console.warn(`⚡ Operating in resilient mode (API will serve memory/mock fallback data)`);
++    if (error.message.includes('whitelist') || error.message.includes('ETIMEDOUT') || error.message.includes('querySrv') || error.message.includes('could not connect')) {
++      console.warn(`⚡ This usually means your current IP address is not allowed in MongoDB Atlas.`);
++      console.warn(`⚡ Fix: Atlas dashboard → Network Access → Add IP Address → "Allow Access from Anywhere" (0.0.0.0/0) for local dev.`);
++    }
++    console.warn(`⚡ Operating in resilient mode (routes that need the database will fail until this is fixed).`);
+   }
+ };
+ 
+diff --git a/server/models/User.js b/server/models/User.js
+index 18ae396..e9af541 100644
+--- a/server/models/User.js
++++ b/server/models/User.js
+@@ -20,11 +20,10 @@ const userSchema = new mongoose.Schema({
+   resetPasswordExpires: { type: Date, select: false }
+ }, { timestamps: true });
+ 
+-userSchema.pre('save', async function (next) {
+-  if (!this.isModified('password')) return next();
++userSchema.pre('save', async function () {
++  if (!this.isModified('password')) return;
+   const salt = await bcrypt.genSalt(10);
+   this.password = await bcrypt.hash(this.password, salt);
+-  next();
+ });
+ 
+ userSchema.methods.matchPassword = async function (enteredPassword) {
