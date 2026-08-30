@@ -14,8 +14,8 @@ const userSchema = new mongoose.Schema({
   jobSuccessRate: { type: Number, default: 100 },
   skills: [{ type: String }],
   bio: { type: String },
-  stripeAccountId: { type: String },
-  stripeOnboardingComplete: { type: Boolean, default: false },
+  razorpayAccountId: { type: String }, // Route Linked Account id (acc_...) for freelancer payouts
+  razorpayOnboardingComplete: { type: Boolean, default: false },
   resetPasswordToken: { type: String, select: false },
   resetPasswordExpires: { type: Date, select: false }
 }, { timestamps: true });

@@ -13,9 +13,9 @@ const milestoneSchema = new mongoose.Schema({
   fundedAt: { type: Date },
   releasedAt: { type: Date },
   platformFee: { type: Number, default: 0 },
-  stripeCheckoutSessionId: { type: String },
-  stripePaymentIntentId: { type: String },
-  stripeTransferId: { type: String }
+  razorpayOrderId: { type: String },
+  razorpayPaymentId: { type: String },
+  razorpayTransferId: { type: String }
 }, { timestamps: true });
 
 const contractSchema = new mongoose.Schema({

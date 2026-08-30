@@ -291,7 +291,7 @@ export default function ProjectList({
 
                       {/* Required Skills Pills */}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1.25rem' }}>
-                        {proj.skills.map((skill, idx) => (
+                        {(proj.skills || []).map((skill, idx) => (
                           <span key={idx} className="skill-pill">{skill}</span>
                         ))}
                       </div>

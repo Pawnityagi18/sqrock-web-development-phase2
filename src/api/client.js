@@ -213,36 +213,40 @@ export const apiFetchContracts = async () => {
   return [];
 };
 
-// Starts a Stripe Checkout session for a milestone. Returns { url } — the caller
-// must redirect the browser there; funding is only confirmed once Stripe redirects
-// back and verify-session (or the webhook) marks it funded.
+// Creates a Razorpay Order for a milestone. Returns order details the caller uses
+// to open Razorpay's Checkout modal — this is a JS overlay, not a redirect.
 export const apiFundMilestone = async (contractId, milestoneId) => {
   const result = await safeFetchJson(`${API_BASE_URL}/payments/contracts/${contractId}/milestones/${milestoneId}/checkout`, {
     method: 'POST',
     headers: getHeaders()
   });
-  if (result.ok && result.data && result.data.url) {
-    return { url: result.data.url };
+  if (result.ok && result.data && result.data.orderId) {
+    return result.data; // { orderId, amount, currency, keyId }
   }
   throw new Error(result.data?.message || 'Starting checkout failed');
 };
 
-export const apiVerifyPaymentSession = async (sessionId) => {
-  const result = await safeFetchJson(`${API_BASE_URL}/payments/verify-session?session_id=${encodeURIComponent(sessionId)}`, {
-    headers: getHeaders(false)
+// Called right after Razorpay Checkout's success handler fires, with the three
+// fields it returns. Verifies the payment signature server-side.
+export const apiVerifyPayment = async (payload) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/payments/verify`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
   });
   return result.ok ? result.data : { success: false, funded: false };
 };
 
-export const apiStartPayoutOnboarding = async () => {
+// Creates the freelancer's Razorpay Route Linked Account from bank/business details
+// they enter directly (no hosted onboarding redirect exists for Route, unlike Stripe).
+export const apiStartPayoutOnboarding = async (details) => {
   const result = await safeFetchJson(`${API_BASE_URL}/payments/connect/onboarding`, {
     method: 'POST',
-    headers: getHeaders()
+    headers: getHeaders(),
+    body: JSON.stringify(details)
   });
-  if (result.ok && result.data && result.data.url) {
-    return { url: result.data.url };
-  }
-  throw new Error(result.data?.message || 'Could not start payout setup');
+  if (result.ok) return result.data;
+  throw new Error(result.data?.message || 'Could not create payout account');
 };
 
 export const apiGetPayoutStatus = async () => {

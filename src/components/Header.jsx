@@ -72,6 +72,9 @@ export default function Header({
     }
   };
 
+  const isLoggedIn = Boolean(currentUser && currentUser.loggedIn);
+  const role = currentUser?.role; // 'freelancer' | 'client' | undefined when logged out
+
   const handleDeleteAccountClick = () => {
     if (window.confirm('⚠️ Are you sure you want to permanently delete your account? This action cannot be undone.')) {
       onDeleteAccount();
@@ -139,100 +142,102 @@ export default function Header({
 
         {/* Desktop Navigation Links */}
         <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button 
-            onClick={() => setActiveTab('explore')}
-            className={`btn ${activeTab === 'explore' ? 'btn-secondary' : ''}`}
-            style={{ 
-              color: activeTab === 'explore' ? 'var(--primary)' : 'var(--text-muted)',
-              background: activeTab === 'explore' ? 'var(--primary-light)' : 'transparent',
-              border: 'none'
-            }}
-          >
-            <Search size={16} /> Browse Jobs
-          </button>
+          {(!isLoggedIn || role === 'freelancer') && (
+            <button 
+              onClick={() => isLoggedIn ? setActiveTab('explore') : onOpenAuthModal('login')}
+              className={`btn ${activeTab === 'explore' ? 'btn-secondary' : ''}`}
+              style={{ 
+                color: activeTab === 'explore' ? 'var(--primary)' : 'var(--text-muted)',
+                background: activeTab === 'explore' ? 'var(--primary-light)' : 'transparent',
+                border: 'none'
+              }}
+            >
+              <Search size={16} /> Browse Jobs
+            </button>
+          )}
           
-          <button 
-            onClick={() => setActiveTab('freelancers')}
-            className={`btn ${activeTab === 'freelancers' ? 'btn-secondary' : ''}`}
-            style={{ 
-              color: activeTab === 'freelancers' ? 'var(--primary)' : 'var(--text-muted)',
-              background: activeTab === 'freelancers' ? 'var(--primary-light)' : 'transparent',
-              border: 'none'
-            }}
-          >
-            <UserCheck size={16} /> Find Talent
-          </button>
+          {(!isLoggedIn || role === 'client') && (
+            <button 
+              onClick={() => isLoggedIn ? setActiveTab('freelancers') : onOpenAuthModal('login')}
+              className={`btn ${activeTab === 'freelancers' ? 'btn-secondary' : ''}`}
+              style={{ 
+                color: activeTab === 'freelancers' ? 'var(--primary)' : 'var(--text-muted)',
+                background: activeTab === 'freelancers' ? 'var(--primary-light)' : 'transparent',
+                border: 'none'
+              }}
+            >
+              <UserCheck size={16} /> Find Talent
+            </button>
+          )}
 
-          <button 
-            onClick={() => setActiveTab('dashboard')}
-            className={`btn ${activeTab === 'dashboard' ? 'btn-secondary' : ''}`}
-            style={{ 
-              color: activeTab === 'dashboard' ? 'var(--primary)' : 'var(--text-muted)',
-              background: activeTab === 'dashboard' ? 'var(--primary-light)' : 'transparent',
-              border: 'none',
-              position: 'relative'
-            }}
-          >
-            <LayoutDashboard size={16} /> Dashboard
-            {proposalsCount > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '4px',
-                right: '4px',
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--accent-emerald)'
-              }} />
-            )}
-          </button>
+          {isLoggedIn && (
+            <button 
+              onClick={() => setActiveTab('dashboard')}
+              className={`btn ${activeTab === 'dashboard' ? 'btn-secondary' : ''}`}
+              style={{ 
+                color: activeTab === 'dashboard' ? 'var(--primary)' : 'var(--text-muted)',
+                background: activeTab === 'dashboard' ? 'var(--primary-light)' : 'transparent',
+                border: 'none',
+                position: 'relative'
+              }}
+            >
+              <LayoutDashboard size={16} /> Dashboard
+              {proposalsCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '4px',
+                  right: '4px',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--accent-emerald)'
+                }} />
+              )}
+            </button>
+          )}
         </nav>
 
         {/* Header Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           
-          {/* Role Switcher Pill */}
-          <div style={{
-            background: 'var(--bg-input)',
-            border: '1px solid var(--border-medium)',
-            padding: '3px',
-            borderRadius: 'var(--radius-full)',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <button 
-              onClick={() => setUserRole('freelancer')}
-              style={{
-                border: 'none',
-                background: userRole === 'freelancer' ? 'var(--primary)' : 'transparent',
-                color: userRole === 'freelancer' ? '#FFF' : 'var(--text-muted)',
-                padding: '0.35rem 0.75rem',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Freelancer
-            </button>
-            <button 
-              onClick={() => setUserRole('client')}
-              style={{
-                border: 'none',
-                background: userRole === 'client' ? 'var(--secondary)' : 'transparent',
-                color: userRole === 'client' ? '#FFF' : 'var(--text-muted)',
-                padding: '0.35rem 0.75rem',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Employer
-            </button>
-          </div>
+          {/* Account Type Indicator — reflects the real logged-in role, not a free toggle */}
+          {isLoggedIn && (
+            <div style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-medium)',
+              padding: '3px',
+              borderRadius: 'var(--radius-full)',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              <span 
+                style={{
+                  border: 'none',
+                  background: role === 'freelancer' ? 'var(--primary)' : 'transparent',
+                  color: role === 'freelancer' ? '#FFF' : 'var(--text-dim)',
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '0.78rem',
+                  fontWeight: 700
+                }}
+              >
+                Freelancer
+              </span>
+              <span 
+                style={{
+                  border: 'none',
+                  background: role === 'client' ? 'var(--secondary)' : 'transparent',
+                  color: role === 'client' ? '#FFF' : 'var(--text-dim)',
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '0.78rem',
+                  fontWeight: 700
+                }}
+              >
+                Employer
+              </span>
+            </div>
+          )}
 
           {/* Saved Items Icon */}
           <div 
@@ -444,14 +449,16 @@ export default function Header({
             </div>
           )}
 
-          {/* Post Project Button */}
-          <button 
-            onClick={onOpenPostModal}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-          >
-            <PlusCircle size={17} /> Post Project
-          </button>
+          {/* Post Project Button — client-only marketplace action */}
+          {(!isLoggedIn || role === 'client') && (
+            <button 
+              onClick={() => isLoggedIn ? onOpenPostModal() : onOpenAuthModal('login')}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <PlusCircle size={17} /> Post Project
+            </button>
+          )}
 
         </div>
       </div>

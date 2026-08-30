@@ -13,7 +13,7 @@ import proposalRoutes from './routes/proposalRoutes.js';
 import freelancerRoutes from './routes/freelancerRoutes.js';
 import contractRoutes from './routes/contractRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
-import paymentRoutes, { handleStripeWebhook } from './routes/paymentRoutes.js';
+import paymentRoutes, { handleRazorpayWebhook } from './routes/paymentRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
@@ -35,9 +35,9 @@ app.use(cors(allowedOrigin ? { origin: allowedOrigin, credentials: true } : {}))
 
 app.use('/api/', generalLimiter);
 
-// IMPORTANT: the Stripe webhook needs the raw request body to verify the signature,
+// IMPORTANT: the Razorpay webhook needs the raw request body to verify the signature,
 // so it must be registered BEFORE express.json() and must not be re-parsed as JSON.
-app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleRazorpayWebhook);
 
 app.use(express.json());
 

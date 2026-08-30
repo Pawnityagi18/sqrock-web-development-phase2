@@ -9,6 +9,7 @@ import FreelancerModal from './components/FreelancerModal';
 import PostProjectModal from './components/PostProjectModal';
 import AuthModal from './components/AuthModal';
 import Dashboard from './components/Dashboard';
+import AuthGate from './components/AuthGate';
 import Footer from './components/Footer';
 import Toast from './components/Toast';
 
@@ -21,7 +22,6 @@ import {
   apiAcceptProposal,
   apiFetchContracts,
   apiFetchMe,
-  apiVerifyPaymentSession,
   setAuthToken,
   checkServerHealth 
 } from './api/client';
@@ -176,34 +176,6 @@ export default function App() {
     setToast({ message, type });
   };
 
-  // Handle returning from Stripe Checkout (?payment=success&session_id=...) or
-  // Stripe Connect onboarding (?stripe=onboarded / ?stripe=refresh)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const paymentStatus = params.get('payment');
-    const sessionId = params.get('session_id');
-    const stripeStatus = params.get('stripe');
-
-    if (paymentStatus === 'success' && sessionId) {
-      apiVerifyPaymentSession(sessionId).then((result) => {
-        if (result.funded) {
-          showToast('Milestone funded! Funds are held in escrow until you release them.', 'success');
-        } else {
-          showToast('Payment is processing — check back in a moment.', 'info');
-        }
-        loadContracts();
-      });
-    } else if (paymentStatus === 'cancelled') {
-      showToast('Payment was cancelled.', 'info');
-    } else if (stripeStatus === 'onboarded') {
-      showToast('Payout setup complete! You can now receive released funds.', 'success');
-    }
-
-    if (paymentStatus || stripeStatus) {
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, []);
-
   // Toggle Bookmark Handler
   const handleToggleSaveProject = (projectId) => {
     setSavedProjectIds(prev => {
@@ -216,6 +188,17 @@ export default function App() {
 
   // Create Project Handler
   const handleCreateProject = async (newProjData) => {
+    if (!currentUser) {
+      setIsPostModalOpen(false);
+      showToast('Please log in to post a project.', 'info');
+      setAuthModalConfig({ isOpen: true, mode: 'login' });
+      return;
+    }
+    if (currentUser.role !== 'client') {
+      setIsPostModalOpen(false);
+      showToast('Only clients can post projects.', 'error');
+      return;
+    }
     try {
       const newProject = {
         title: newProjData.title,
@@ -237,6 +220,17 @@ export default function App() {
 
   // Submit Proposal Handler
   const handleSubmitProposal = async (proposalData) => {
+    if (!currentUser) {
+      setSelectedProject(null);
+      showToast('Please log in as a freelancer to submit a proposal.', 'info');
+      setAuthModalConfig({ isOpen: true, mode: 'login' });
+      return;
+    }
+    if (currentUser.role !== 'freelancer') {
+      setSelectedProject(null);
+      showToast('Only freelancers can submit proposals.', 'error');
+      return;
+    }
     try {
       const payload = {
         projectId: proposalData.projectId || proposalData.project,
@@ -287,6 +281,7 @@ export default function App() {
     setCurrentUser(null);
     setAuthToken(null);
     setContracts([]);
+    setActiveTab('explore');
     showToast('Logged out successfully', 'info');
   };
 
@@ -347,52 +342,79 @@ export default function App() {
               onSelectCategory={setSelectedCategory}
             />
 
-            {/* Projects Explorer with Left Filter Sidebar */}
+            {/* Projects Explorer with Left Filter Sidebar — gated: browsing the live job list requires an account */}
             <div id="project-list-section">
-              <ProjectList 
-                projects={projects}
-                categories={CATEGORIES}
-                selectedCategory={selectedCategory}
-                setSelectedCategory={setSelectedCategory}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                budgetRange={budgetRange}
-                setBudgetRange={setBudgetRange}
-                urgencyFilter={urgencyFilter}
-                setUrgencyFilter={setUrgencyFilter}
-                sortBy={sortBy}
-                setSortBy={setSortBy}
-                savedProjects={savedProjectIds}
-                onToggleSaveProject={handleToggleSaveProject}
-                onSelectProject={(proj) => setSelectedProject(proj)}
-              />
+              {currentUser ? (
+                <ProjectList 
+                  projects={projects}
+                  categories={CATEGORIES}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  budgetRange={budgetRange}
+                  setBudgetRange={setBudgetRange}
+                  urgencyFilter={urgencyFilter}
+                  setUrgencyFilter={setUrgencyFilter}
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                  savedProjects={savedProjectIds}
+                  onToggleSaveProject={handleToggleSaveProject}
+                  onSelectProject={(proj) => setSelectedProject(proj)}
+                />
+              ) : (
+                <AuthGate
+                  title="Log in to browse jobs"
+                  message="Create a free account to see live project listings and submit proposals."
+                  onLogin={() => setAuthModalConfig({ isOpen: true, mode: 'login' })}
+                  onSignup={() => setAuthModalConfig({ isOpen: true, mode: 'signup' })}
+                />
+              )}
             </div>
           </>
         )}
 
         {activeTab === 'freelancers' && (
-          <FreelancerList 
-            freelancers={freelancers}
-            onSelectFreelancer={(freelancer) => setSelectedFreelancer(freelancer)}
-          />
+          currentUser ? (
+            <FreelancerList 
+              freelancers={freelancers}
+              onSelectFreelancer={(freelancer) => setSelectedFreelancer(freelancer)}
+            />
+          ) : (
+            <AuthGate
+              title="Log in to find talent"
+              message="Create a free client account to browse freelancer profiles and hire."
+              onLogin={() => setAuthModalConfig({ isOpen: true, mode: 'login' })}
+              onSignup={() => setAuthModalConfig({ isOpen: true, mode: 'signup' })}
+            />
+          )
         )}
 
         {activeTab === 'dashboard' && (
-          <Dashboard 
-            userRole={userRole}
-            projects={projects}
-            proposals={proposals}
-            contracts={contracts}
-            currentUser={currentUser}
-            onAcceptProposal={handleAcceptProposal}
-            onRejectProposal={handleRejectProposal}
-            onUpdateProjectStatus={(id, status) => {
-              setProjects(prev => prev.map(p => (p._id === id || p.id === id) ? { ...p, status } : p));
-              showToast(`Project status updated to ${status}`);
-            }}
-            onOpenProjectModal={(proj) => setSelectedProject(proj)}
-            onRefreshContracts={loadContracts}
-          />
+          currentUser ? (
+            <Dashboard 
+              userRole={userRole}
+              projects={projects}
+              proposals={proposals}
+              contracts={contracts}
+              currentUser={currentUser}
+              onAcceptProposal={handleAcceptProposal}
+              onRejectProposal={handleRejectProposal}
+              onUpdateProjectStatus={(id, status) => {
+                setProjects(prev => prev.map(p => (p._id === id || p.id === id) ? { ...p, status } : p));
+                showToast(`Project status updated to ${status}`);
+              }}
+              onOpenProjectModal={(proj) => setSelectedProject(proj)}
+              onRefreshContracts={loadContracts}
+            />
+          ) : (
+            <AuthGate
+              title="Log in to view your dashboard"
+              message="Log in to see your proposals, projects, contracts, and messages."
+              onLogin={() => setAuthModalConfig({ isOpen: true, mode: 'login' })}
+              onSignup={() => setAuthModalConfig({ isOpen: true, mode: 'signup' })}
+            />
+          )
         )}
 
       </main>
@@ -406,6 +428,8 @@ export default function App() {
           project={selectedProject}
           onClose={() => setSelectedProject(null)}
           onSubmitProposal={handleSubmitProposal}
+          currentUser={currentUser}
+          onRequireAuth={(mode) => { setSelectedProject(null); setAuthModalConfig({ isOpen: true, mode }); }}
         />
       )}
 
@@ -425,6 +449,7 @@ export default function App() {
           categories={CATEGORIES}
           onClose={() => setIsPostModalOpen(false)}
           onSubmitProject={handleCreateProject}
+          currentUser={currentUser}
         />
       )}
 

@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { X, CheckCircle2, Clock, DollarSign, Send, ShieldCheck, FileText, UserCheck, Sparkles } from 'lucide-react';
 import { generateAIProposal } from '../utils/aiGenerator';
 
-export default function ProjectModal({ project, onClose, onSubmitProposal }) {
-  const [freelancerName, setFreelancerName] = useState('Elena Rostova');
-  const [freelancerEmail, setFreelancerEmail] = useState('elena.rostova@dev.com');
+export default function ProjectModal({ project, onClose, onSubmitProposal, currentUser, onRequireAuth }) {
   const [bidAmount, setBidAmount] = useState(project.budget);
   const [estimatedDays, setEstimatedDays] = useState(project.daysLeft || 14);
   const [coverLetter, setCoverLetter] = useState('');
@@ -12,6 +10,8 @@ export default function ProjectModal({ project, onClose, onSubmitProposal }) {
 
   const [errors, setErrors] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const isFreelancer = currentUser?.role === 'freelancer';
 
   // Automated 5% Platform Fee Calculation
   const platformFee = Math.round(bidAmount * 0.05);
@@ -21,7 +21,7 @@ export default function ProjectModal({ project, onClose, onSubmitProposal }) {
   const handleGenerateAIProposal = () => {
     setIsGeneratingAI(true);
     setTimeout(() => {
-      const aiPitch = generateAIProposal(project, freelancerName);
+      const aiPitch = generateAIProposal(project, currentUser?.name || 'there');
       setCoverLetter(aiPitch);
       setIsGeneratingAI(false);
     }, 400);
@@ -31,8 +31,6 @@ export default function ProjectModal({ project, onClose, onSubmitProposal }) {
     e.preventDefault();
     const newErrors = {};
 
-    if (!freelancerName.trim()) newErrors.freelancerName = 'Name is required';
-    if (!freelancerEmail.trim() || !freelancerEmail.includes('@')) newErrors.freelancerEmail = 'Valid email is required';
     if (!bidAmount || bidAmount <= 0) newErrors.bidAmount = 'Valid bid offer required';
     if (!coverLetter.trim() || coverLetter.length < 20) newErrors.coverLetter = 'Proposal must be at least 20 characters';
 
@@ -42,10 +40,8 @@ export default function ProjectModal({ project, onClose, onSubmitProposal }) {
     }
 
     const proposalPayload = {
-      projectId: project.id,
+      projectId: project.id || project._id,
       projectTitle: project.title,
-      freelancerName,
-      freelancerEmail,
       bidAmount,
       platformFee,
       netAmount: netEarnings,
@@ -173,34 +169,53 @@ export default function ProjectModal({ project, onClose, onSubmitProposal }) {
                 Your proposal has been logged in the client dashboard. You will receive notifications on updates.
               </p>
             </div>
+          ) : !currentUser ? (
+            <div style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.75rem',
+              textAlign: 'center'
+            }}>
+              <ShieldCheck size={32} color="var(--primary)" style={{ marginBottom: '0.5rem' }} />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.4rem' }}>Log in to submit a proposal</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                Create a free freelancer account to bid on this project.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                <button onClick={() => onRequireAuth('login')} className="btn btn-secondary">Log In</button>
+                <button onClick={() => onRequireAuth('signup')} className="btn btn-primary">Sign Up</button>
+              </div>
+            </div>
+          ) : !isFreelancer ? (
+            <div style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.75rem',
+              textAlign: 'center'
+            }}>
+              <FileText size={32} color="var(--text-dim)" style={{ marginBottom: '0.5rem' }} />
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.4rem' }}>Client accounts can't submit proposals</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                You're logged in as an employer. Log in with a freelancer account to bid on this project.
+              </p>
+            </div>
           ) : (
             <form onSubmit={handleSubmit}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Send size={18} color="var(--primary)" /> Submit Your Proposal
               </h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">Freelancer Name</label>
-                  <input 
-                    type="text" 
-                    value={freelancerName}
-                    onChange={(e) => setFreelancerName(e.target.value)}
-                    className="form-input"
-                  />
-                  {errors.freelancerName && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.freelancerName}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Email Address</label>
-                  <input 
-                    type="email" 
-                    value={freelancerEmail}
-                    onChange={(e) => setFreelancerEmail(e.target.value)}
-                    className="form-input"
-                  />
-                  {errors.freelancerEmail && <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem' }}>{errors.freelancerEmail}</span>}
-                </div>
+              <div style={{
+                background: 'var(--primary-light)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.75rem 1rem',
+                marginBottom: '1.25rem',
+                fontSize: '0.85rem',
+                color: 'var(--text-main)'
+              }}>
+                Submitting as <strong>{currentUser.name}</strong> ({currentUser.email})
               </div>
 
               {/* Bid Amount & Platform Fee Calculator */}

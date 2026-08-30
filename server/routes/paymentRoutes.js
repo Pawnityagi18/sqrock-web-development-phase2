@@ -1,5 +1,6 @@
 import express from 'express';
-import stripe from '../config/stripe.js';
+import crypto from 'crypto';
+import razorpay from '../config/razorpay.js';
 import User from '../models/User.js';
 import Contract from '../models/Contract.js';
 import { protect, requireRole } from '../middleware/authMiddleware.js';
@@ -7,64 +8,68 @@ import { createNotification } from './notificationRoutes.js';
 
 const router = express.Router();
 
-function getFrontendUrl(req) {
-  return process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
-}
-
-// ---- Stripe Connect onboarding (freelancer payouts) ----
-
-// POST /api/payments/connect/onboarding — creates (or reuses) an Express account
-// for the freelancer and returns a Stripe-hosted onboarding link.
+// ---- Freelancer payout onboarding (Razorpay Route Linked Account) ----
+//
+// Unlike Stripe Connect, Razorpay Route does not have a hosted onboarding redirect —
+// the platform collects the freelancer's bank/business details directly and creates
+// the Linked Account via API. This endpoint expects that info from a frontend form.
 router.post('/connect/onboarding', protect, requireRole('freelancer'), async (req, res) => {
   try {
+    const { name, email, phone, businessName, accountNumber, ifscCode, beneficiaryName } = req.body;
+    if (!name || !email || !phone || !accountNumber || !ifscCode || !beneficiaryName) {
+      return res.status(400).json({ success: false, message: 'Name, email, phone, account number, IFSC code, and beneficiary name are all required.' });
+    }
+
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
-    if (!user.stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: 'express',
-        email: user.email,
-        capabilities: { transfers: { requested: true } }
-      });
-      user.stripeAccountId = account.id;
-      await user.save();
-    }
-
-    const frontendUrl = getFrontendUrl(req);
-    const accountLink = await stripe.accountLinks.create({
-      account: user.stripeAccountId,
-      refresh_url: `${frontendUrl}/?stripe=refresh`,
-      return_url: `${frontendUrl}/?stripe=onboarded`,
-      type: 'account_onboarding'
+    const account = await razorpay.accounts.create({
+      email,
+      phone,
+      type: 'route',
+      legal_business_name: businessName || name,
+      business_type: 'individual',
+      contact_name: name,
+      profile: {
+        category: 'other',
+        subcategory: 'other',
+        addresses: {
+          registered: {
+            street1: 'NA',
+            street2: 'NA',
+            city: 'NA',
+            state: 'NA',
+            postal_code: '000000',
+            country: 'IN'
+          }
+        }
+      },
+      legal_info: {
+        pan: 'AAACL1234C' // placeholder — real PAN required for live mode, test mode accepts dummy values
+      }
     });
 
-    res.json({ success: true, url: accountLink.url });
+    // Attach bank account details for settlement (stakeholder-level in real Route setup;
+    // simplified here for test mode — see README note on production hardening needed).
+    user.razorpayAccountId = account.id;
+    user.razorpayOnboardingComplete = true; // test mode accounts are usable immediately
+    await user.save();
+
+    res.json({ success: true, accountId: account.id, message: 'Payout account created. You can now receive released milestone funds.' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    const message = error?.error?.description || error.message || 'Could not create payout account.';
+    res.status(500).json({ success: false, message });
   }
 });
 
-// GET /api/payments/connect/status — checks whether the freelancer can actually receive payouts yet.
+// GET /api/payments/connect/status
 router.get('/connect/status', protect, requireRole('freelancer'), async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    if (!user?.stripeAccountId) {
-      return res.json({ success: true, onboardingComplete: false, chargesEnabled: false });
-    }
-
-    const account = await stripe.accounts.retrieve(user.stripeAccountId);
-    const onboardingComplete = Boolean(account.details_submitted && account.charges_enabled);
-
-    if (onboardingComplete !== user.stripeOnboardingComplete) {
-      user.stripeOnboardingComplete = onboardingComplete;
-      await user.save();
-    }
-
     res.json({
       success: true,
-      onboardingComplete,
-      chargesEnabled: account.charges_enabled,
-      detailsSubmitted: account.details_submitted
+      onboardingComplete: Boolean(user?.razorpayOnboardingComplete),
+      accountId: user?.razorpayAccountId || null
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -74,10 +79,9 @@ router.get('/connect/status', protect, requireRole('freelancer'), async (req, re
 // ---- Milestone funding (client pays into escrow) ----
 
 // POST /api/payments/contracts/:contractId/milestones/:milestoneId/checkout
-// Replaces the old "instant fund" stub: this actually charges the client via Stripe
-// Checkout. Funds land on the PLATFORM's Stripe balance and stay there — the
-// milestone is only marked 'funded' once payment is confirmed (via webhook, or the
-// verify-session fallback below), never on this call itself.
+// Creates a Razorpay Order. Funds captured against this order sit on the PLATFORM's
+// Razorpay balance until explicitly transferred to the freelancer's Linked Account
+// at release time (see contractRoutes.js /release) — this is the escrow hold.
 router.post('/contracts/:contractId/milestones/:milestoneId/checkout', protect, requireRole('client'), async (req, res) => {
   try {
     const contract = await Contract.findById(req.params.contractId);
@@ -92,63 +96,66 @@ router.post('/contracts/:contractId/milestones/:milestoneId/checkout', protect, 
       return res.status(400).json({ success: false, message: `Milestone is already ${milestone.status}.` });
     }
 
-    const frontendUrl = getFrontendUrl(req);
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          product_data: { name: `Milestone: ${milestone.title}` },
-          unit_amount: Math.round(milestone.amount * 100)
-        },
-        quantity: 1
-      }],
-      metadata: {
+    const order = await razorpay.orders.create({
+      amount: Math.round(milestone.amount * 100), // paise
+      currency: 'INR',
+      receipt: `milestone_${milestone._id}`,
+      notes: {
         contractId: contract._id.toString(),
         milestoneId: milestone._id.toString()
-      },
-      success_url: `${frontendUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${frontendUrl}/?payment=cancelled`
+      }
     });
 
-    milestone.stripeCheckoutSessionId = session.id;
+    milestone.razorpayOrderId = order.id;
     await contract.save();
 
-    res.json({ success: true, url: session.url });
+    res.json({
+      success: true,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    const message = error?.error?.description || error.message || 'Could not create payment order.';
+    res.status(500).json({ success: false, message });
   }
 });
 
-// GET /api/payments/verify-session?session_id=... — fallback confirmation for local dev
-// where Stripe webhooks can't reach localhost. The webhook below is authoritative in
-// production; this lets the UI reflect a successful payment immediately on return.
-router.get('/verify-session', protect, async (req, res) => {
+// POST /api/payments/verify — called by the frontend right after Razorpay Checkout's
+// success handler fires. Verifies the signature so a client can't fake a successful
+// payment; the webhook below is the fully authoritative path for production.
+router.post('/verify', protect, async (req, res) => {
   try {
-    const { session_id } = req.query;
-    if (!session_id) return res.status(400).json({ success: false, message: 'session_id is required.' });
-
-    const session = await stripe.checkout.sessions.retrieve(session_id);
-    if (session.payment_status !== 'paid') {
-      return res.json({ success: true, funded: false });
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Missing payment verification fields.' });
     }
 
-    const funded = await markMilestoneFunded(session.metadata.contractId, session.metadata.milestoneId, session.payment_intent);
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ success: false, message: 'Payment signature verification failed.' });
+    }
+
+    const funded = await markMilestoneFundedByOrderId(razorpay_order_id, razorpay_payment_id);
     res.json({ success: true, funded });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-async function markMilestoneFunded(contractId, milestoneId, paymentIntentId) {
-  const contract = await Contract.findById(contractId);
+async function markMilestoneFundedByOrderId(orderId, paymentId) {
+  const contract = await Contract.findOne({ 'milestones.razorpayOrderId': orderId });
   if (!contract) return false;
-  const milestone = contract.milestones.id(milestoneId);
+  const milestone = contract.milestones.find(m => m.razorpayOrderId === orderId);
   if (!milestone || milestone.status !== 'pending') return false;
 
   milestone.status = 'funded';
-  milestone.stripePaymentIntentId = paymentIntentId;
+  milestone.razorpayPaymentId = paymentId;
   milestone.fundedAt = new Date();
   await contract.save();
 
@@ -164,22 +171,25 @@ async function markMilestoneFunded(contractId, milestoneId, paymentIntentId) {
 
 // ---- Webhook (authoritative funding confirmation) ----
 // Mounted with express.raw() in server/index.js BEFORE the global express.json()
-// middleware — Stripe signature verification needs the raw, unparsed body.
-export async function handleStripeWebhook(req, res) {
-  const sig = req.headers['stripe-signature'];
-  let event;
+// middleware — Razorpay signature verification needs the raw, unparsed body.
+export async function handleRazorpayWebhook(req, res) {
+  const signature = req.headers['x-razorpay-signature'];
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+    .update(req.body) // raw Buffer
+    .digest('hex');
 
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('⚠️  Stripe webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  if (signature !== expectedSignature) {
+    console.error('⚠️  Razorpay webhook signature verification failed.');
+    return res.status(400).json({ success: false, message: 'Invalid signature' });
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    if (session.payment_status === 'paid' && session.metadata?.contractId && session.metadata?.milestoneId) {
-      await markMilestoneFunded(session.metadata.contractId, session.metadata.milestoneId, session.payment_intent);
+  const event = JSON.parse(req.body.toString());
+
+  if (event.event === 'payment.captured') {
+    const payment = event.payload.payment.entity;
+    if (payment.order_id) {
+      await markMilestoneFundedByOrderId(payment.order_id, payment.id);
     }
   }
 

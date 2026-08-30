@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, PlusCircle, DollarSign, Calendar, Tag, FileText, CheckCircle2 } from 'lucide-react';
 
-export default function PostProjectModal({ categories, onClose, onSubmitProject }) {
+export default function PostProjectModal({ categories, onClose, onSubmitProject, currentUser }) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(categories[0]?.id || 'web-dev');
   const [budgetType, setBudgetType] = useState('Fixed');
@@ -10,7 +10,6 @@ export default function PostProjectModal({ categories, onClose, onSubmitProject 
   const [skillsInput, setSkillsInput] = useState('React.js, Node.js, Tailwind CSS');
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState('Featured');
-  const [clientName, setClientName] = useState('Apex Innovations');
 
   const [errors, setErrors] = useState({});
 
@@ -45,11 +44,11 @@ export default function PostProjectModal({ categories, onClose, onSubmitProject 
       status: 'Open',
       urgency,
       client: {
-        name: clientName,
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        rating: 5.0,
-        totalSpent: 12500,
-        location: 'New York, NY',
+        name: currentUser?.name || 'You',
+        avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        rating: currentUser?.rating || 5.0,
+        totalSpent: 0,
+        location: 'Not specified',
         verified: true
       },
       skills: skillsArray.length > 0 ? skillsArray : ['React', 'JavaScript'],
@@ -106,14 +105,15 @@ export default function PostProjectModal({ categories, onClose, onSubmitProject 
         {/* Body Form */}
         <form onSubmit={handleSubmit} style={{ padding: '1.75rem' }}>
           
-          <div className="form-group">
-            <label className="form-label">Company / Employer Name</label>
-            <input 
-              type="text"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              className="form-input"
-            />
+          <div style={{
+            background: 'var(--primary-light)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.75rem 1rem',
+            marginBottom: '1.25rem',
+            fontSize: '0.85rem',
+            color: 'var(--text-main)'
+          }}>
+            Posting as <strong>{currentUser?.name || 'You'}</strong> ({currentUser?.email})
           </div>
 
           <div className="form-group">

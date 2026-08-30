@@ -1,7 +1,7 @@
 import express from 'express';
 import Contract from '../models/Contract.js';
 import User from '../models/User.js';
-import stripe from '../config/stripe.js';
+import razorpay from '../config/razorpay.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { createNotification } from './notificationRoutes.js';
 
@@ -55,8 +55,8 @@ router.get('/:id', protect, async (req, res) => {
 // NOTE: The old POST /:id/milestones/:milestoneId/fund endpoint has been removed.
 // It used to mark a milestone 'funded' directly with no payment check, which meant
 // a client could fund escrow without ever paying. Real funding now goes through
-// POST /api/payments/contracts/:id/milestones/:milestoneId/checkout (Stripe Checkout),
-// confirmed via webhook or GET /api/payments/verify-session.
+// POST /api/payments/contracts/:id/milestones/:milestoneId/checkout (Razorpay Order +
+// Checkout), confirmed via webhook or POST /api/payments/verify.
 
 // POST /api/contracts/:id/milestones/:milestoneId/submit - Freelancer submits work for milestone
 router.post('/:id/milestones/:milestoneId/submit', protect, async (req, res) => {
@@ -111,24 +111,35 @@ router.post('/:id/milestones/:milestoneId/release', protect, async (req, res) =>
     }
 
     const freelancer = await User.findById(contract.freelancer);
-    if (!freelancer?.stripeAccountId || !freelancer.stripeOnboardingComplete) {
+    if (!freelancer?.razorpayAccountId || !freelancer.razorpayOnboardingComplete) {
       return res.status(400).json({ success: false, message: 'Freelancer has not finished setting up payouts yet.' });
+    }
+    if (!milestone.razorpayPaymentId) {
+      return res.status(400).json({ success: false, message: 'No captured payment found for this milestone.' });
     }
 
     const platformFee = Math.round(milestone.amount * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
     const netAmount = Math.round((milestone.amount - platformFee) * 100) / 100;
 
-    const transfer = await stripe.transfers.create({
-      amount: Math.round(netAmount * 100),
-      currency: 'usd',
-      destination: freelancer.stripeAccountId,
-      transfer_group: `contract_${contract._id}`
+    // Route: Create Transfers from Payments — moves funds from the already-captured
+    // payment to the freelancer's Linked Account. on_hold: 0 releases immediately.
+    const transferResponse = await razorpay.payments.transfer(milestone.razorpayPaymentId, {
+      transfers: [{
+        account: freelancer.razorpayAccountId,
+        amount: Math.round(netAmount * 100), // paise
+        currency: 'INR',
+        on_hold: 0,
+        notes: {
+          contractId: contract._id.toString(),
+          milestoneId: milestone._id.toString()
+        }
+      }]
     });
 
     milestone.status = 'released';
     milestone.releasedAt = new Date();
     milestone.platformFee = platformFee;
-    milestone.stripeTransferId = transfer.id;
+    milestone.razorpayTransferId = transferResponse.items?.[0]?.id || null;
 
     // Check if all milestones released
     const allReleased = contract.milestones.every(m => m.status === 'released');
@@ -141,7 +152,7 @@ router.post('/:id/milestones/:milestoneId/release', protect, async (req, res) =>
     await createNotification(
       contract.freelancer,
       'milestone_released',
-      `Payment of $${netAmount} released for milestone "${milestone.title}".`,
+      `Payment of ₹${netAmount} released for milestone "${milestone.title}".`,
       '/dashboard?tab=contracts'
     );
 

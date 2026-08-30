@@ -1,12 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Shield, CheckCircle2, Clock, Send, FileText, ChevronRight, ExternalLink } from 'lucide-react';
-import { apiFundMilestone, apiSubmitMilestone, apiReleaseMilestone, apiGetPayoutStatus, apiStartPayoutOnboarding } from '../api/client';
+import { DollarSign, Shield, CheckCircle2, Clock, Send, FileText, ChevronRight, X } from 'lucide-react';
+import { apiFundMilestone, apiVerifyPayment, apiSubmitMilestone, apiReleaseMilestone, apiGetPayoutStatus, apiStartPayoutOnboarding } from '../api/client';
+
+// Loads Razorpay's Checkout script once and reuses it — Razorpay Checkout is a JS
+// overlay/modal, not a hosted redirect page like Stripe Checkout.
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 export default function ContractsPanel({ contracts, currentUser, onRefresh, onOpenChat }) {
   const [loadingId, setLoadingId] = useState(null);
   const [submitNotes, setSubmitNotes] = useState({});
   const [errorMsg, setErrorMsg] = useState('');
   const [payoutStatus, setPayoutStatus] = useState(null);
+  const [showOnboardingForm, setShowOnboardingForm] = useState(false);
+  const [onboardingData, setOnboardingData] = useState({
+    name: currentUser?.name || '', email: currentUser?.email || '', phone: '',
+    businessName: '', accountNumber: '', ifscCode: '', beneficiaryName: currentUser?.name || ''
+  });
+  const [onboardingSubmitting, setOnboardingSubmitting] = useState(false);
 
   useEffect(() => {
     if (currentUser?.role === 'freelancer') {
@@ -14,12 +33,19 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
     }
   }, [currentUser]);
 
-  const handleSetupPayouts = async () => {
+  const handleOnboardingSubmit = async (e) => {
+    e.preventDefault();
+    setOnboardingSubmitting(true);
+    setErrorMsg('');
     try {
-      const { url } = await apiStartPayoutOnboarding();
-      window.location.href = url;
+      await apiStartPayoutOnboarding(onboardingData);
+      setShowOnboardingForm(false);
+      const status = await apiGetPayoutStatus();
+      setPayoutStatus(status);
     } catch (err) {
-      setErrorMsg(err.message || 'Could not start payout setup');
+      setErrorMsg(err.message || 'Could not set up payouts');
+    } finally {
+      setOnboardingSubmitting(false);
     }
   };
 
@@ -29,15 +55,54 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
         <Shield className="w-6 h-6 text-amber-600 flex-shrink-0" />
         <div>
           <div className="font-semibold text-slate-800">Set up payouts to get paid</div>
-          <div className="text-sm text-slate-500">Connect a Stripe account (test mode) before you can receive released milestone funds.</div>
+          <div className="text-sm text-slate-500">Add your bank details (Razorpay test mode) before you can receive released milestone funds.</div>
         </div>
       </div>
       <button
-        onClick={handleSetupPayouts}
+        onClick={() => setShowOnboardingForm(true)}
         className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm rounded-xl transition shadow flex items-center gap-2 flex-shrink-0"
       >
-        <ExternalLink className="w-4 h-4" /> Set Up Payouts
+        <Shield className="w-4 h-4" /> Set Up Payouts
       </button>
+    </div>
+  );
+
+  const onboardingModal = showOnboardingForm && (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-md w-full p-6 relative max-h-[90vh] overflow-y-auto">
+        <button onClick={() => setShowOnboardingForm(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+          <X className="w-5 h-5" />
+        </button>
+        <h3 className="text-lg font-bold text-slate-800 mb-1">Set up payouts</h3>
+        <p className="text-sm text-slate-500 mb-4">Test mode — you can use dummy bank details. Real details required before going live.</p>
+        <form onSubmit={handleOnboardingSubmit} className="space-y-3">
+          <input required placeholder="Full name" value={onboardingData.name}
+            onChange={e => setOnboardingData({ ...onboardingData, name: e.target.value })}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          <input required type="email" placeholder="Email" value={onboardingData.email}
+            onChange={e => setOnboardingData({ ...onboardingData, email: e.target.value })}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          <input required placeholder="Phone (10 digits)" value={onboardingData.phone}
+            onChange={e => setOnboardingData({ ...onboardingData, phone: e.target.value })}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          <input placeholder="Business name (optional)" value={onboardingData.businessName}
+            onChange={e => setOnboardingData({ ...onboardingData, businessName: e.target.value })}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          <input required placeholder="Bank account number" value={onboardingData.accountNumber}
+            onChange={e => setOnboardingData({ ...onboardingData, accountNumber: e.target.value })}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          <input required placeholder="IFSC code" value={onboardingData.ifscCode}
+            onChange={e => setOnboardingData({ ...onboardingData, ifscCode: e.target.value.toUpperCase() })}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          <input required placeholder="Beneficiary name (as per bank)" value={onboardingData.beneficiaryName}
+            onChange={e => setOnboardingData({ ...onboardingData, beneficiaryName: e.target.value })}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          <button type="submit" disabled={onboardingSubmitting}
+            className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition disabled:opacity-50">
+            {onboardingSubmitting ? 'Setting up…' : 'Complete Setup'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 
@@ -45,6 +110,7 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
     return (
       <div className="space-y-6">
         {payoutBanner}
+        {onboardingModal}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm">
           <Shield className="w-16 h-16 text-slate-300 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Contracts</h3>
@@ -62,8 +128,49 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
     try {
       setLoadingId(milestoneId);
       setErrorMsg('');
-      const { url } = await apiFundMilestone(contractId, milestoneId);
-      window.location.href = url; // redirect to Stripe-hosted Checkout; funding is confirmed on return
+
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        setErrorMsg('Could not load Razorpay Checkout. Check your internet connection.');
+        setLoadingId(null);
+        return;
+      }
+
+      const order = await apiFundMilestone(contractId, milestoneId);
+
+      const razorpayOptions = {
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.orderId,
+        name: 'WorkPulse',
+        description: 'Milestone escrow deposit',
+        theme: { color: '#059669' },
+        handler: async (response) => {
+          try {
+            const verifyResult = await apiVerifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+            if (verifyResult.funded) {
+              onRefresh();
+            } else {
+              setErrorMsg('Payment received but confirmation is still processing — refresh in a moment.');
+            }
+          } catch (err) {
+            setErrorMsg(err.message || 'Payment verification failed');
+          } finally {
+            setLoadingId(null);
+          }
+        },
+        modal: {
+          ondismiss: () => setLoadingId(null) // user closed the Razorpay modal without paying
+        }
+      };
+
+      const rzp = new window.Razorpay(razorpayOptions);
+      rzp.open();
     } catch (err) {
       setErrorMsg(err.message || 'Funding failed');
       setLoadingId(null);
@@ -113,6 +220,7 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
   return (
     <div className="space-y-6">
       {payoutBanner}
+      {onboardingModal}
 
       {errorMsg && (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm font-medium">
@@ -143,7 +251,7 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <span className="text-xs text-slate-400 block">Total Budget</span>
-                  <span className="text-2xl font-black text-emerald-400">${contract.totalAmount?.toLocaleString()}</span>
+                  <span className="text-2xl font-black text-emerald-400">₹{contract.totalAmount?.toLocaleString()}</span>
                 </div>
 
                 {onOpenChat && (
@@ -170,7 +278,7 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
                       <h5 className="font-semibold text-slate-800">{m.title}</h5>
                       {getStatusBadge(m.status)}
                     </div>
-                    <p className="text-sm font-bold text-emerald-700">${m.amount?.toLocaleString()}</p>
+                    <p className="text-sm font-bold text-emerald-700">₹{m.amount?.toLocaleString()}</p>
                     {m.submissionNotes && (
                       <div className="mt-2 p-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-600">
                         <strong className="text-slate-800">Submission Note:</strong> {m.submissionNotes}
@@ -189,7 +297,7 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
                             disabled={loadingId === m._id}
                             className="w-full md:w-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition shadow flex items-center justify-center gap-2 disabled:opacity-50"
                           >
-                            <DollarSign className="w-4 h-4" /> Deposit Escrow (${m.amount})
+                            <DollarSign className="w-4 h-4" /> Deposit Escrow (₹{m.amount})
                           </button>
                         )}
 
