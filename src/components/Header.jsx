@@ -25,7 +25,7 @@ export default function Header({
   const avatarInputRef = useRef(null);
 
   useEffect(() => {
-    if (!currentUser || !currentUser.loggedIn) return;
+    if (!currentUser) return;
     const loadNotifications = () => {
       apiFetchNotifications().then((data) => {
         setNotifications(data.notifications || []);
@@ -72,7 +72,7 @@ export default function Header({
     }
   };
 
-  const isLoggedIn = Boolean(currentUser && currentUser.loggedIn);
+  const isLoggedIn = Boolean(currentUser);
   const role = currentUser?.role; // 'freelancer' | 'client' | undefined when logged out
 
   const handleDeleteAccountClick = () => {
@@ -275,7 +275,7 @@ export default function Header({
           </div>
 
           {/* Notification Bell */}
-          {currentUser && currentUser.loggedIn && (
+          {isLoggedIn && (
             <div style={{ position: 'relative' }}>
               <div
                 onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
@@ -339,7 +339,7 @@ export default function Header({
               )}
             </div>
           )}
-          {currentUser && currentUser.loggedIn ? (
+          {isLoggedIn ? (
             <div style={{ position: 'relative' }}>
               <div 
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
