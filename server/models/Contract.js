@@ -6,7 +6,7 @@ const milestoneSchema = new mongoose.Schema({
   dueDate: { type: Date },
   status: {
     type: String,
-    enum: ['pending', 'funded', 'submitted', 'released', 'disputed'],
+    enum: ['pending', 'payment_processing', 'funded', 'submitted', 'released', 'disputed'],
     default: 'pending'
   },
   submissionNotes: { type: String },
@@ -15,7 +15,9 @@ const milestoneSchema = new mongoose.Schema({
   platformFee: { type: Number, default: 0 },
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
-  razorpayTransferId: { type: String }
+  razorpayTransferId: { type: String },
+  paymentAttempt: { type: Number, default: 0 },
+  paymentStartedAt: { type: Date }
 }, { timestamps: true });
 
 const contractSchema = new mongoose.Schema({

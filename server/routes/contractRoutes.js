@@ -1,7 +1,7 @@
 import express from 'express';
 import Contract from '../models/Contract.js';
 import User from '../models/User.js';
-import razorpay from '../config/razorpay.js';
+import razorpay, { isRazorpayConfigured } from '../config/razorpay.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { createNotification } from './notificationRoutes.js';
 
@@ -106,8 +106,11 @@ router.post('/:id/milestones/:milestoneId/release', protect, async (req, res) =>
     const milestone = contract.milestones.id(req.params.milestoneId);
     if (!milestone) return res.status(404).json({ success: false, message: 'Milestone not found' });
 
-    if (!['funded', 'submitted'].includes(milestone.status)) {
+    if (milestone.status !== 'submitted') {
       return res.status(400).json({ success: false, message: 'Milestone cannot be released in current state' });
+    }
+    if (!isRazorpayConfigured) {
+      return res.status(503).json({ success: false, message: 'Razorpay test mode is not configured.' });
     }
 
     const freelancer = await User.findById(contract.freelancer);

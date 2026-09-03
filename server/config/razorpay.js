@@ -1,6 +1,12 @@
 import Razorpay from 'razorpay';
 
-if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+export const isRazorpayConfigured = Boolean(
+  process.env.RAZORPAY_KEY_ID &&
+  process.env.RAZORPAY_KEY_SECRET &&
+  process.env.RAZORPAY_KEY_ID.startsWith('rzp_test_')
+);
+
+if (!isRazorpayConfigured) {
   console.warn('⚠️  Missing RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET — payment routes will fail until they are set in .env (use test-mode rzp_test_... keys from https://dashboard.razorpay.com/app/keys).');
 }
 

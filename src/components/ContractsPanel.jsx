@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Shield, CheckCircle2, Clock, Send, FileText, ChevronRight, X } from 'lucide-react';
-import { apiFundMilestone, apiVerifyPayment, apiSubmitMilestone, apiReleaseMilestone, apiGetPayoutStatus, apiStartPayoutOnboarding } from '../api/client';
+import { apiFundMilestone, apiVerifyPayment, apiCancelMilestoneCheckout, apiSubmitMilestone, apiReleaseMilestone, apiGetPayoutStatus, apiStartPayoutOnboarding } from '../api/client';
 
 // Loads Razorpay's Checkout script once and reuses it — Razorpay Checkout is a JS
 // overlay/modal, not a hosted redirect page like Stripe Checkout.
@@ -138,6 +138,21 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
 
       const order = await apiFundMilestone(contractId, milestoneId);
 
+      let checkoutCompleted = false;
+      const cancelCheckout = async () => {
+        if (checkoutCompleted) return;
+        try {
+          await apiCancelMilestoneCheckout(contractId, milestoneId, order.orderId);
+          await onRefresh();
+        } catch (err) {
+          // A payment may have completed while the modal was closing; the next
+          // contract refresh will show the server's authoritative status.
+          setErrorMsg(err.message || 'Checkout was closed. Refresh to see the latest payment status.');
+        } finally {
+          setLoadingId(null);
+        }
+      };
+
       const razorpayOptions = {
         key: order.keyId,
         amount: order.amount,
@@ -147,6 +162,7 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
         description: 'Milestone escrow deposit',
         theme: { color: '#059669' },
         handler: async (response) => {
+          checkoutCompleted = true;
           try {
             const verifyResult = await apiVerifyPayment({
               razorpay_order_id: response.razorpay_order_id,
@@ -165,11 +181,13 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
           }
         },
         modal: {
-          ondismiss: () => setLoadingId(null) // user closed the Razorpay modal without paying
-        }
+          ondismiss: cancelCheckout
+        },
+        retry: { enabled: false }
       };
 
       const rzp = new window.Razorpay(razorpayOptions);
+      rzp.on('payment.failed', cancelCheckout);
       rzp.open();
     } catch (err) {
       setErrorMsg(err.message || 'Funding failed');
@@ -212,6 +230,8 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
         return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 text-xs font-semibold rounded-full border border-amber-200"><Clock className="w-3.5 h-3.5" /> Work Submitted</span>;
       case 'released':
         return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-200"><CheckCircle2 className="w-3.5 h-3.5" /> Payment Released</span>;
+      case 'payment_processing':
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-violet-50 text-violet-700 text-xs font-semibold rounded-full border border-violet-200"><Clock className="w-3.5 h-3.5" /> Payment Processing</span>;
       default:
         return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 text-xs font-semibold rounded-full border border-slate-200"><Clock className="w-3.5 h-3.5" /> Pending Funding</span>;
     }
@@ -297,7 +317,7 @@ export default function ContractsPanel({ contracts, currentUser, onRefresh, onOp
                             disabled={loadingId === m._id}
                             className="w-full md:w-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition shadow flex items-center justify-center gap-2 disabled:opacity-50"
                           >
-                            <DollarSign className="w-4 h-4" /> Deposit Escrow (₹{m.amount})
+                            <DollarSign className="w-4 h-4" /> Fund Milestone (₹{m.amount})
                           </button>
                         )}
 

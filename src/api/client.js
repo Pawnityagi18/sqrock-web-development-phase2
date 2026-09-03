@@ -234,7 +234,18 @@ export const apiVerifyPayment = async (payload) => {
     headers: getHeaders(),
     body: JSON.stringify(payload)
   });
-  return result.ok ? result.data : { success: false, funded: false };
+  if (result.ok && result.data?.success) return result.data;
+  throw new Error(result.data?.message || 'Payment verification failed');
+};
+
+export const apiCancelMilestoneCheckout = async (contractId, milestoneId, orderId) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/payments/contracts/${contractId}/milestones/${milestoneId}/cancel-checkout`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ orderId })
+  });
+  if (result.ok && result.data?.contract) return result.data.contract;
+  throw new Error(result.data?.message || 'Could not cancel the payment checkout');
 };
 
 // Creates the freelancer's Razorpay Route Linked Account from bank/business details

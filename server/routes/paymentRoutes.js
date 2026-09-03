@@ -1,12 +1,25 @@
 import express from 'express';
 import crypto from 'crypto';
-import razorpay from '../config/razorpay.js';
+import razorpay, { isRazorpayConfigured } from '../config/razorpay.js';
 import User from '../models/User.js';
 import Contract from '../models/Contract.js';
 import { protect, requireRole } from '../middleware/authMiddleware.js';
 import { createNotification } from './notificationRoutes.js';
 
 const router = express.Router();
+
+const hasWebhookSecret = () => Boolean(process.env.RAZORPAY_WEBHOOK_SECRET);
+const safeEqual = (left, right) => {
+  if (!left || !right) return false;
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+};
+
+const razorpayUnavailable = (res) => res.status(503).json({
+  success: false,
+  message: 'Razorpay test mode is not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the server.'
+});
 
 // ---- Freelancer payout onboarding (Razorpay Route Linked Account) ----
 //
@@ -15,6 +28,7 @@ const router = express.Router();
 // the Linked Account via API. This endpoint expects that info from a frontend form.
 router.post('/connect/onboarding', protect, requireRole('freelancer'), async (req, res) => {
   try {
+    if (!isRazorpayConfigured) return razorpayUnavailable(res);
     const { name, email, phone, businessName, accountNumber, ifscCode, beneficiaryName } = req.body;
     if (!name || !email || !phone || !accountNumber || !ifscCode || !beneficiaryName) {
       return res.status(400).json({ success: false, message: 'Name, email, phone, account number, IFSC code, and beneficiary name are all required.' });
@@ -84,6 +98,7 @@ router.get('/connect/status', protect, requireRole('freelancer'), async (req, re
 // at release time (see contractRoutes.js /release) — this is the escrow hold.
 router.post('/contracts/:contractId/milestones/:milestoneId/checkout', protect, requireRole('client'), async (req, res) => {
   try {
+    if (!isRazorpayConfigured) return razorpayUnavailable(res);
     const contract = await Contract.findById(req.params.contractId);
     if (!contract) return res.status(404).json({ success: false, message: 'Contract not found.' });
     if (contract.client.toString() !== req.user._id.toString()) {
@@ -92,20 +107,34 @@ router.post('/contracts/:contractId/milestones/:milestoneId/checkout', protect, 
 
     const milestone = contract.milestones.id(req.params.milestoneId);
     if (!milestone) return res.status(404).json({ success: false, message: 'Milestone not found.' });
+    if (milestone.status === 'payment_processing' && milestone.razorpayOrderId) {
+      return res.json({
+        success: true,
+        orderId: milestone.razorpayOrderId,
+        amount: Math.round(milestone.amount * 100),
+        currency: 'INR',
+        keyId: process.env.RAZORPAY_KEY_ID,
+        resumed: true
+      });
+    }
     if (milestone.status !== 'pending') {
       return res.status(400).json({ success: false, message: `Milestone is already ${milestone.status}.` });
     }
 
+    const attempt = (milestone.paymentAttempt || 0) + 1;
     const order = await razorpay.orders.create({
       amount: Math.round(milestone.amount * 100), // paise
       currency: 'INR',
-      receipt: `milestone_${milestone._id}`,
+      receipt: `ms_${milestone._id.toString().slice(-16)}_${attempt}`,
       notes: {
         contractId: contract._id.toString(),
         milestoneId: milestone._id.toString()
       }
     });
 
+    milestone.status = 'payment_processing';
+    milestone.paymentAttempt = attempt;
+    milestone.paymentStartedAt = new Date();
     milestone.razorpayOrderId = order.id;
     await contract.save();
 
@@ -122,11 +151,39 @@ router.post('/contracts/:contractId/milestones/:milestoneId/checkout', protect, 
   }
 });
 
+// The Razorpay modal was dismissed or its payment failed. Reset only the current
+// pending order so a later checkout starts a new, traceable attempt.
+router.post('/contracts/:contractId/milestones/:milestoneId/cancel-checkout', protect, requireRole('client'), async (req, res) => {
+  try {
+    const contract = await Contract.findById(req.params.contractId);
+    if (!contract) return res.status(404).json({ success: false, message: 'Contract not found.' });
+    if (contract.client.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'You do not own this contract.' });
+    }
+    const milestone = contract.milestones.id(req.params.milestoneId);
+    if (!milestone) return res.status(404).json({ success: false, message: 'Milestone not found.' });
+    if (milestone.status !== 'payment_processing') {
+      return res.status(400).json({ success: false, message: 'There is no payment checkout to cancel.' });
+    }
+    if (req.body.orderId && req.body.orderId !== milestone.razorpayOrderId) {
+      return res.status(409).json({ success: false, message: 'Checkout order does not match this milestone.' });
+    }
+    milestone.status = 'pending';
+    milestone.razorpayOrderId = undefined;
+    milestone.paymentStartedAt = undefined;
+    await contract.save();
+    res.json({ success: true, contract });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // POST /api/payments/verify — called by the frontend right after Razorpay Checkout's
 // success handler fires. Verifies the signature so a client can't fake a successful
 // payment; the webhook below is the fully authoritative path for production.
 router.post('/verify', protect, async (req, res) => {
   try {
+    if (!isRazorpayConfigured) return razorpayUnavailable(res);
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ success: false, message: 'Missing payment verification fields.' });
@@ -137,22 +194,28 @@ router.post('/verify', protect, async (req, res) => {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
 
-    if (expectedSignature !== razorpay_signature) {
+    if (!safeEqual(expectedSignature, razorpay_signature)) {
       return res.status(400).json({ success: false, message: 'Payment signature verification failed.' });
     }
 
-    const funded = await markMilestoneFundedByOrderId(razorpay_order_id, razorpay_payment_id);
-    res.json({ success: true, funded });
+    const funded = await markMilestoneFundedByOrderId(razorpay_order_id, razorpay_payment_id, req.user._id);
+    if (!funded) return res.status(409).json({ success: false, funded: false, message: 'This payment cannot be applied to the current milestone state.' });
+    res.json({ success: true, funded: true, contract: funded.contract, alreadyFunded: funded.alreadyFunded });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-async function markMilestoneFundedByOrderId(orderId, paymentId) {
+async function markMilestoneFundedByOrderId(orderId, paymentId, expectedClientId = null) {
   const contract = await Contract.findOne({ 'milestones.razorpayOrderId': orderId });
   if (!contract) return false;
+  if (expectedClientId && contract.client.toString() !== expectedClientId.toString()) return false;
   const milestone = contract.milestones.find(m => m.razorpayOrderId === orderId);
-  if (!milestone || milestone.status !== 'pending') return false;
+  if (!milestone) return false;
+  if (milestone.status === 'funded' && milestone.razorpayPaymentId === paymentId) {
+    return { contract, alreadyFunded: true };
+  }
+  if (milestone.status !== 'payment_processing') return false;
 
   milestone.status = 'funded';
   milestone.razorpayPaymentId = paymentId;
@@ -166,20 +229,23 @@ async function markMilestoneFundedByOrderId(orderId, paymentId) {
     '/dashboard?tab=contracts'
   );
 
-  return true;
+  return { contract, alreadyFunded: false };
 }
 
 // ---- Webhook (authoritative funding confirmation) ----
 // Mounted with express.raw() in server/index.js BEFORE the global express.json()
 // middleware — Razorpay signature verification needs the raw, unparsed body.
 export async function handleRazorpayWebhook(req, res) {
+  if (!hasWebhookSecret()) {
+    return res.status(503).json({ success: false, message: 'Razorpay webhook is not configured.' });
+  }
   const signature = req.headers['x-razorpay-signature'];
   const expectedSignature = crypto
     .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
     .update(req.body) // raw Buffer
     .digest('hex');
 
-  if (signature !== expectedSignature) {
+  if (!safeEqual(signature, expectedSignature)) {
     console.error('⚠️  Razorpay webhook signature verification failed.');
     return res.status(400).json({ success: false, message: 'Invalid signature' });
   }
