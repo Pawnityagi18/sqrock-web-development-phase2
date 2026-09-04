@@ -238,6 +238,28 @@ export const apiVerifyPayment = async (payload) => {
   throw new Error(result.data?.message || 'Payment verification failed');
 };
 
+export const apiRejectProposal = async (proposalId) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/proposals/${proposalId}/reject`, { method: 'POST', headers: getHeaders() });
+  if (result.ok && result.data?.success) return result.data;
+  throw new Error(result.data?.message || 'Could not reject proposal');
+};
+
+export const apiGenerateProjectDescription = async (details) => {
+  const result = await safeFetchJson(`${API_BASE_URL}/ai/project-description`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(details) });
+  if (result.ok && result.data?.description) return result.data.description;
+  throw new Error(result.data?.message || 'Could not generate a description');
+};
+
+export const apiSearchProjects = async (filters = {}) => {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '' && value !== 'all') params.set(key, value);
+  });
+  const result = await safeFetchJson(`${API_BASE_URL}/projects?${params.toString()}`);
+  if (result.ok && result.data?.projects) return result.data;
+  throw new Error(result.data?.message || 'Could not load projects');
+};
+
 export const apiCancelMilestoneCheckout = async (contractId, milestoneId, orderId) => {
   const result = await safeFetchJson(`${API_BASE_URL}/payments/contracts/${contractId}/milestones/${milestoneId}/cancel-checkout`, {
     method: 'POST',

@@ -14,9 +14,15 @@ router.get('/', protect, async (req, res) => {
     let query = {};
 
     if (projectId) {
+      const project = await Project.findById(projectId).select('client');
+      if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
+      if (req.user.role === 'client' && project.client.toString() !== req.user._id.toString()) return res.status(403).json({ success: false, message: 'Only the project owner can view its proposals' });
       query.project = projectId;
     } else if (req.user.role === 'freelancer') {
       query.freelancer = req.user._id;
+    } else {
+      const ownProjects = await Project.find({ client: req.user._id }).select('_id');
+      query.project = { $in: ownProjects.map(project => project._id) };
     }
 
     const proposals = await Proposal.find(query)
@@ -39,6 +45,8 @@ router.post('/', protect, requireRole('freelancer'), async (req, res) => {
     if (!project) {
       return res.status(404).json({ success: false, message: 'Project not found' });
     }
+    if (project.status !== 'Open') return res.status(400).json({ success: false, message: 'This project is no longer accepting proposals' });
+    if (project.client.toString() === req.user._id.toString()) return res.status(400).json({ success: false, message: 'You cannot submit a proposal to your own project' });
 
     const existingProposal = await Proposal.findOne({ project: projectId, freelancer: req.user._id });
     if (existingProposal) {
@@ -85,6 +93,7 @@ router.post('/:id/accept', protect, requireRole('client'), async (req, res) => {
     if (proposal.project.client.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Only project owner can accept proposal' });
     }
+    if (proposal.status !== 'Pending') return res.status(409).json({ success: false, message: `This proposal is already ${proposal.status.toLowerCase()}` });
 
     proposal.status = 'Accepted';
     await proposal.save();
@@ -120,6 +129,18 @@ router.post('/:id/accept', protect, requireRole('client'), async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+});
+
+router.post('/:id/reject', protect, requireRole('client'), async (req, res) => {
+  try {
+    const proposal = await Proposal.findById(req.params.id).populate('project');
+    if (!proposal) return res.status(404).json({ success: false, message: 'Proposal not found' });
+    if (proposal.project.client.toString() !== req.user._id.toString()) return res.status(403).json({ success: false, message: 'Only project owner can reject proposal' });
+    if (proposal.status !== 'Pending') return res.status(409).json({ success: false, message: `This proposal is already ${proposal.status.toLowerCase()}` });
+    proposal.status = 'Declined'; await proposal.save();
+    await createNotification(proposal.freelancer, 'proposal_rejected', `Your proposal on "${proposal.project.title}" was not selected.`, '/dashboard?tab=proposals');
+    res.json({ success: true, proposal });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 });
 
 export default router;

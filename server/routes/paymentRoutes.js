@@ -198,6 +198,13 @@ router.post('/verify', protect, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Payment signature verification failed.' });
     }
 
+    // A valid Checkout signature proves the response was signed, but the server
+    // still checks Razorpay's record before marking escrow funded.
+    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+    if (payment.order_id !== razorpay_order_id || payment.status !== 'captured') {
+      return res.status(409).json({ success: false, message: 'Payment has not been captured for this order.' });
+    }
+
     const funded = await markMilestoneFundedByOrderId(razorpay_order_id, razorpay_payment_id, req.user._id);
     if (!funded) return res.status(409).json({ success: false, funded: false, message: 'This payment cannot be applied to the current milestone state.' });
     res.json({ success: true, funded: true, contract: funded.contract, alreadyFunded: funded.alreadyFunded });

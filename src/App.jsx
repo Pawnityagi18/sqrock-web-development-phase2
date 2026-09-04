@@ -22,6 +22,8 @@ import {
   apiAcceptProposal,
   apiFetchContracts,
   apiFetchMe,
+  apiSearchProjects,
+  apiRejectProposal,
   setAuthToken,
   checkServerHealth 
 } from './api/client';
@@ -86,6 +88,9 @@ export default function App() {
   const [budgetRange, setBudgetRange] = useState(10000);
   const [urgencyFilter, setUrgencyFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
+  const [projectSearchMeta, setProjectSearchMeta] = useState({ total: 0, page: 1, pages: 1 });
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState('');
 
   // Modal Control States
   const [selectedProject, setSelectedProject] = useState(null);
@@ -172,6 +177,20 @@ export default function App() {
     }
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!serverOnline) return;
+    const timer = setTimeout(async () => {
+      setProjectsLoading(true); setProjectsError('');
+      try {
+        const result = await apiSearchProjects({ search: searchQuery, category: selectedCategory, maxBudget: budgetRange, urgency: urgencyFilter, sort: sortBy, page: 1, limit: 12 });
+        setProjects(result.projects);
+        setProjectSearchMeta({ total: result.total, page: result.page, pages: result.pages });
+      } catch (error) { setProjectsError(error.message); }
+      finally { setProjectsLoading(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [serverOnline, searchQuery, selectedCategory, budgetRange, urgencyFilter, sortBy]);
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
   };
@@ -203,10 +222,17 @@ export default function App() {
       const newProject = {
         title: newProjData.title,
         description: newProjData.description,
-        category: newProjData.categoryName || newProjData.category,
+        category: newProjData.category,
+        categoryId: newProjData.category,
+        categoryName: newProjData.categoryName,
         budget: Number(newProjData.budget),
         skills: newProjData.skills,
-        duration: newProjData.duration || '1-3 months'
+        duration: newProjData.duration || '1-3 months',
+        budgetType: newProjData.budgetType,
+        deadline: newProjData.deadline,
+        daysLeft: newProjData.daysLeft,
+        urgency: newProjData.urgency,
+        deliverables: newProjData.deliverables
       };
 
       const savedResult = await apiCreateProject(newProject);
@@ -236,7 +262,9 @@ export default function App() {
         projectId: proposalData.projectId || proposalData.project,
         coverLetter: proposalData.coverLetter,
         bidAmount: Number(proposalData.bidAmount),
-        estimatedDays: Number(proposalData.estimatedDays || 7)
+        estimatedDays: Number(proposalData.estimatedDays || 7),
+        platformFee: Number(proposalData.platformFee || 0),
+        netAmount: Number(proposalData.netAmount || proposalData.bidAmount)
       };
 
       const savedResult = await apiSubmitProposal(payload);
@@ -263,9 +291,12 @@ export default function App() {
     }
   };
 
-  const handleRejectProposal = (proposalId) => {
-    setProposals(prev => prev.map(p => (p._id === proposalId || p.id === proposalId) ? { ...p, status: 'Declined' } : p));
-    showToast('Proposal declined.', 'info');
+  const handleRejectProposal = async (proposalId) => {
+    try {
+      await apiRejectProposal(proposalId);
+      setProposals(prev => prev.map(p => (p._id === proposalId || p.id === proposalId) ? { ...p, status: 'Declined' } : p));
+      showToast('Proposal declined.', 'info');
+    } catch (error) { showToast(error.message || 'Could not decline proposal', 'error'); }
   };
 
   // Auth Handlers
@@ -361,6 +392,9 @@ export default function App() {
                   savedProjects={savedProjectIds}
                   onToggleSaveProject={handleToggleSaveProject}
                   onSelectProject={(proj) => setSelectedProject(proj)}
+                  loading={projectsLoading}
+                  error={projectsError}
+                  total={serverOnline ? projectSearchMeta.total : undefined}
                 />
               ) : (
                 <AuthGate

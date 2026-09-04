@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, PlusCircle, DollarSign, Calendar, Tag, FileText, CheckCircle2 } from 'lucide-react';
+import { X, PlusCircle, Sparkles } from 'lucide-react';
+import { apiGenerateProjectDescription } from '../api/client';
 
 export default function PostProjectModal({ categories, onClose, onSubmitProject, currentUser }) {
   const [title, setTitle] = useState('');
@@ -10,6 +11,7 @@ export default function PostProjectModal({ categories, onClose, onSubmitProject,
   const [skillsInput, setSkillsInput] = useState('React.js, Node.js, Tailwind CSS');
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState('Featured');
+  const [generating, setGenerating] = useState(false);
 
   const [errors, setErrors] = useState({});
 
@@ -62,6 +64,17 @@ export default function PostProjectModal({ categories, onClose, onSubmitProject,
     };
 
     onSubmitProject(newProject);
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!title.trim()) { setErrors({ title: 'Add a project title first' }); return; }
+    setGenerating(true); setErrors({});
+    try {
+      const categoryName = categories.find(c => c.id === category)?.name || category;
+      const description = await apiGenerateProjectDescription({ title, category: categoryName, skills: skillsInput.split(',').map(s => s.trim()).filter(Boolean), budget });
+      setDescription(description);
+    } catch (error) { setErrors({ description: error.message }); }
+    finally { setGenerating(false); }
   };
 
   return (
@@ -204,7 +217,7 @@ export default function PostProjectModal({ categories, onClose, onSubmitProject,
           </div>
 
           <div className="form-group">
-            <label className="form-label">Detailed Project Description & Scope</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><label className="form-label">Detailed Project Description & Scope</label><button type="button" onClick={handleGenerateDescription} disabled={generating} className="btn btn-secondary btn-sm"><Sparkles size={14} /> {generating ? 'Generating…' : 'Generate with AI'}</button></div>
             <textarea 
               rows={4}
               placeholder="Outline the project goals, key technical stack, expected deliverables, and any relevant criteria..."

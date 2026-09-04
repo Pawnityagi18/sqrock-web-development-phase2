@@ -16,9 +16,13 @@ export default function ProjectList({
   setSortBy,
   savedProjects,
   onToggleSaveProject,
-  onSelectProject
+  onSelectProject,
+  loading = false,
+  error = '',
+  total
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const filteredProjects = projects;
 
   return (
     <section style={{ padding: '3.5rem 0' }}>
@@ -35,7 +39,7 @@ export default function ProjectList({
         }}>
           <div>
             <h2 style={{ fontSize: '1.85rem', fontWeight: 800, marginBottom: '0.25rem' }}>
-              Available Projects & Jobs ({projects.length})
+              Available Projects & Jobs ({total ?? filteredProjects.length})
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.925rem' }}>
               Explore active job postings from verified clients worldwide
@@ -206,7 +210,7 @@ export default function ProjectList({
 
           {/* Project Cards List */}
           <div>
-            {projects.length === 0 ? (
+            {loading ? <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>Loading projects…</div> : error ? <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>{error}</div> : filteredProjects.length === 0 ? (
               <div className="glass-card" style={{ padding: '3rem 2rem', textAlign: 'center' }}>
                 <AlertCircle size={42} color="var(--text-dim)" style={{ marginBottom: '1rem' }} />
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>No projects match your criteria</h3>
@@ -225,12 +229,20 @@ export default function ProjectList({
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                {projects.map((proj) => {
-                  const isSaved = savedProjects.includes(proj.id);
+                {filteredProjects.map((proj) => {
+                  const projectId = proj._id || proj.id;
+                  const isSaved = savedProjects.includes(projectId);
+                  const client = proj.client || {
+                    name: proj.clientName || 'WorkPulse client',
+                    avatar: proj.clientAvatar,
+                    verified: proj.verifiedClient,
+                    rating: proj.clientRating,
+                    location: proj.clientLocation
+                  };
 
                   return (
                     <div 
-                      key={proj.id} 
+                      key={projectId}
                       className="glass-card glass-card-hoverable"
                       style={{ padding: '1.5rem' }}
                     >
@@ -240,11 +252,11 @@ export default function ProjectList({
                           {proj.urgency === 'Featured' && <span className="badge badge-featured">★ Featured</span>}
                           {proj.urgency === 'Urgent' && <span className="badge badge-urgent">⚡ Urgent</span>}
                           {proj.urgency === 'Hot' && <span className="badge badge-hot">🔥 Hot</span>}
-                          <span className="badge badge-category">{proj.categoryName}</span>
+                          <span className="badge badge-category">{proj.categoryName || proj.category}</span>
                         </div>
 
                         <button 
-                          onClick={() => onToggleSaveProject(proj.id)}
+                          onClick={() => onToggleSaveProject(projectId)}
                           style={{
                             background: 'transparent',
                             border: 'none',
@@ -310,17 +322,17 @@ export default function ProjectList({
                         {/* Client details */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                           <img 
-                            src={proj.client.avatar} 
-                            alt={proj.client.name}
+                            src={client.avatar || '/logo.jpg'}
+                            alt={client.name}
                             style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }}
                           />
                           <div>
                             <div style={{ fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                              {proj.client.name}
-                              {proj.client.verified && <CheckCircle2 size={14} color="var(--accent-emerald)" />}
+                              {client.name}
+                              {client.verified && <CheckCircle2 size={14} color="var(--accent-emerald)" />}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'flex', gap: '0.5rem' }}>
-                              <span>★ {proj.client.rating}</span> • <span>{proj.client.location}</span>
+                              <span>★ {client.rating || 'New'}</span> • <span>{client.location || 'Remote'}</span>
                             </div>
                           </div>
                         </div>
@@ -332,7 +344,7 @@ export default function ProjectList({
                               {proj.budgetType} Price
                             </div>
                             <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--accent-emerald)', fontFamily: 'var(--font-heading)' }}>
-                              ${proj.budget.toLocaleString()}{proj.budgetType === 'Hourly' ? '/hr' : ''}
+                              ${Number(proj.budget || 0).toLocaleString()}{proj.budgetType === 'Hourly' ? '/hr' : ''}
                             </div>
                           </div>
 
